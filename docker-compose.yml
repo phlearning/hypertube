@@ -1,0 +1,93 @@
+services:
+  app:
+    image: hypertube-app
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - hypertube
+
+  reverb:
+    image: hypertube-app
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/var/www/html
+    environment:
+      SKIP_SETUP: "1"
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - hypertube
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-hypertube}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-secret}
+      MYSQL_USER: ${DB_USERNAME:-hypertube}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-secret}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${DB_PASSWORD:-secret}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - hypertube
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - hypertube
+
+  worker:
+    build:
+      context: docker/worker
+    environment:
+      REDIS_HOST: redis
+      LARAVEL_INTERNAL_URL: http://app:8000/internal/torrent-worker/callback
+      TORRENT_WORKER_SECRET: ${TORRENT_WORKER_SECRET:-changeme-in-production}
+    depends_on:
+      redis:
+        condition: service_healthy
+      app:
+        condition: service_started
+    networks:
+      - hypertube
+
+  torrent-fixture:
+    build:
+      context: docker/torrent-fixture
+    environment:
+      TRACKER_ANNOUNCE_URL: http://torrent-fixture:6969/announce
+    ports:
+      - "6969:6969"
+    networks:
+      - hypertube
+
+volumes:
+  mysql_data:
+
+networks:
+  hypertube:
+    driver: bridge

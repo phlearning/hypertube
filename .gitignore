@@ -27,3 +27,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# supervisord runtime files (should live in /var/log, /var/run inside the container)
+supervisord.log
+supervisord.pid

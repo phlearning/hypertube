@@ -43,7 +43,11 @@ return [
     'fortytwo' => [
         'client_id' => env('FORTY_TWO_CLIENT_ID'),
         'client_secret' => env('FORTY_TWO_CLIENT_SECRET'),
-        'redirect' => env('FORTY_TWO_REDIRECT_URI')
+        'redirect' => env('FORTY_TWO_REDIRECT_URI'),
+    ],
+
+    'torrent_worker' => [
+        'secret' => env('TORRENT_WORKER_SECRET'),
     ],
 
 ];
