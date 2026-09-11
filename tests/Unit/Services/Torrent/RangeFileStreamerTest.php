@@ -186,6 +186,50 @@ test('extension matching is case-insensitive', function () {
     unlink($path);
 });
 
+test('a still-downloading file is served with Cache-Control: no-store, since the same range can differ later', function () {
+    $path = fixtureFile(str_repeat('a', 40).str_repeat('z', 60));
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 40, totalBytes: 100, rangeHeader: null);
+
+    expect($response->headers->hasCacheControlDirective('no-store'))->toBeTrue()
+        ->and($response->headers->hasCacheControlDirective('max-age'))->toBeFalse();
+
+    unlink($path);
+});
+
+test('a fully downloaded file is served as cacheable, since its bytes will never change again', function () {
+    $path = fixtureFile(str_repeat('a', 100));
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 100, totalBytes: 100, rangeHeader: null);
+
+    expect($response->headers->hasCacheControlDirective('no-store'))->toBeFalse()
+        ->and($response->headers->hasCacheControlDirective('immutable'))->toBeTrue()
+        ->and($response->headers->getCacheControlDirective('max-age'))->toBe('31536000');
+
+    unlink($path);
+});
+
+test('an unknown totalBytes is treated as not-yet-fully-downloaded, never cached', function () {
+    $path = fixtureFile(str_repeat('a', 100));
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 100, totalBytes: null, rangeHeader: null);
+
+    expect($response->headers->hasCacheControlDirective('no-store'))->toBeTrue();
+
+    unlink($path);
+});
+
+test('a 416 response is never cached, since the missing range may arrive moments later', function () {
+    $path = fixtureFile(str_repeat('a', 100));
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 40, totalBytes: 100, rangeHeader: 'bytes=50-60');
+
+    expect($response->getStatusCode())->toBe(416)
+        ->and($response->headers->hasCacheControlDirective('no-store'))->toBeTrue();
+
+    unlink($path);
+});
+
 test('a missing file produces an empty body instead of a fatal error', function () {
     $path = sys_get_temp_dir().'/range_streamer_test_does_not_exist_'.uniqid();
 

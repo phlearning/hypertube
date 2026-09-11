@@ -48,6 +48,7 @@ class RangeFileStreamer
         $response->headers->set('Content-Type', $this->resolveContentType($path));
         $response->headers->set('Accept-Ranges', 'bytes');
         $response->headers->set('Content-Length', (string) $length);
+        $response->headers->set('Cache-Control', $this->resolveCacheControl($availableBytes, $totalBytes));
 
         if ($isPartial) {
             $response->headers->set('Content-Range', sprintf(
@@ -123,11 +124,36 @@ class RangeFileStreamer
         return self::CONTENT_TYPES[$extension] ?? 'application/octet-stream';
     }
 
+    /**
+     * A file still downloading serves different bytes for the same byte
+     * range over time, so caching it would risk the browser reusing a
+     * stale/incomplete response — no-store. Once the whole file is safely
+     * available, those bytes never change again, so letting the browser
+     * cache them is not just safe but valuable: browsers (Chromium
+     * especially) probe a large non-"faststart" video with many small,
+     * overlapping Range requests while hunting for its metadata box, and a
+     * cache lets repeated probes over the same range reuse what's already
+     * been fetched instead of re-hitting the server every time.
+     */
+    private function resolveCacheControl(int $availableBytes, ?int $totalBytes): string
+    {
+        $isFullyAvailable = $totalBytes !== null && $availableBytes >= $totalBytes;
+
+        return $isFullyAvailable
+            ? 'private, max-age=31536000, immutable'
+            : 'no-store';
+    }
+
     private function notSatisfiableResponse(?int $totalBytes): Response
     {
+        // A range that isn't satisfiable yet can become satisfiable moments
+        // later as more of the file downloads — never let a browser cache
+        // this "not there yet" answer, or it may keep treating a since-
+        // arrived range as permanently missing.
         return new Response('', 416, [
             'Accept-Ranges' => 'bytes',
             'Content-Range' => 'bytes */'.($totalBytes !== null ? (string) $totalBytes : '*'),
+            'Cache-Control' => 'no-store',
         ]);
     }
 
