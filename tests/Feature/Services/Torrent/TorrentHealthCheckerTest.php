@@ -28,6 +28,8 @@ test('it reports seeders and peers from a tracker that exposes complete/incomple
 
     $health = (new TorrentHealthChecker)->check('http://example.test/movie.torrent');
 
+    expect($health['info_hash'])->toHaveLength(40);
+    unset($health['info_hash']);
     expect($health)->toBe(['seeders' => 3, 'peers' => 5, 'name' => 'movie.mp4', 'format' => 'mp4']);
 });
 
@@ -43,6 +45,8 @@ test('it falls back to counting compact peers when the tracker omits complete/in
 
     $health = (new TorrentHealthChecker)->check('http://example.test/movie.torrent');
 
+    expect($health['info_hash'])->toHaveLength(40);
+    unset($health['info_hash']);
     expect($health)->toBe(['seeders' => 0, 'peers' => 2, 'name' => 'movie.mkv', 'format' => 'mkv']);
 });
 
@@ -53,7 +57,7 @@ test('it returns zeroed health when the torrent file cannot be fetched', functio
 
     $health = (new TorrentHealthChecker)->check('http://example.test/movie.torrent');
 
-    expect($health)->toBe(['seeders' => 0, 'peers' => 0, 'name' => '', 'format' => '']);
+    expect($health)->toBe(['seeders' => 0, 'peers' => 0, 'name' => '', 'format' => '', 'info_hash' => '']);
 });
 
 test('it returns zeroed health when the fetched bytes are not a valid torrent file', function () {
@@ -63,10 +67,10 @@ test('it returns zeroed health when the fetched bytes are not a valid torrent fi
 
     $health = (new TorrentHealthChecker)->check('http://example.test/movie.torrent');
 
-    expect($health)->toBe(['seeders' => 0, 'peers' => 0, 'name' => '', 'format' => '']);
+    expect($health)->toBe(['seeders' => 0, 'peers' => 0, 'name' => '', 'format' => '', 'info_hash' => '']);
 });
 
-test('it returns zeroed seeders/peers but still reports name/format when the tracker announce fails', function () {
+test('it returns zeroed seeders/peers but still reports name/format/info_hash when the tracker announce fails', function () {
     Http::fake([
         'example.test/movie.torrent' => Http::response(fakeTorrentBytes('movie.avi')),
         'torrent-fixture:6969/announce*' => Http::response('', 500),
@@ -74,5 +78,7 @@ test('it returns zeroed seeders/peers but still reports name/format when the tra
 
     $health = (new TorrentHealthChecker)->check('http://example.test/movie.torrent');
 
+    expect($health['info_hash'])->toHaveLength(40);
+    unset($health['info_hash']);
     expect($health)->toBe(['seeders' => 0, 'peers' => 0, 'name' => 'movie.avi', 'format' => 'avi']);
 });

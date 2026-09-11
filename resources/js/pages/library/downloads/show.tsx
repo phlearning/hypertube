@@ -21,6 +21,7 @@ type DownloadShowProps = {
 const POLL_INTERVAL_MS = 2000;
 
 const STATUS_LABELS: Record<string, string> = {
+    queued: "En file d'attente",
     pending: 'En attente',
     downloading: 'Téléchargement en cours',
     completed: 'Terminé',

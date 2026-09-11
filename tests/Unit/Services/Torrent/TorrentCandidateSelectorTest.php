@@ -52,3 +52,17 @@ test('a candidate missing seeders/peers/format is treated as the weakest, not an
 
     expect($best['id'])->toBe('healthy');
 });
+
+test('rank orders every candidate best-first instead of returning only the winner', function () {
+    $weak = ['id' => 'weak', 'seeders' => 1, 'peers' => 1, 'format' => 'avi'];
+    $mid = ['id' => 'mid', 'seeders' => 5, 'peers' => 5, 'format' => 'avi'];
+    $strong = ['id' => 'strong', 'seeders' => 20, 'peers' => 20, 'format' => 'mp4'];
+
+    $ranked = (new TorrentCandidateSelector)->rank([$mid, $weak, $strong]);
+
+    expect(array_column($ranked, 'id'))->toBe(['strong', 'mid', 'weak']);
+});
+
+test('rank on an empty list returns an empty list', function () {
+    expect((new TorrentCandidateSelector)->rank([]))->toBe([]);
+});
