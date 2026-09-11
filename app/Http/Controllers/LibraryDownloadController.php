@@ -8,7 +8,7 @@ use App\Services\Torrent\DownloadScheduler;
 use App\Services\Torrent\RangeFileStreamer;
 use App\Services\Torrent\TorrentCandidateSelector;
 use App\Services\Torrent\TorrentHealthChecker;
-use App\Services\Torrent\VideoTranscoder;
+use App\Services\Torrent\TorrentJobPresenter;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,7 +25,7 @@ class LibraryDownloadController extends Controller
         private readonly TorrentCandidateSelector $selector,
         private readonly DownloadScheduler $scheduler,
         private readonly RangeFileStreamer $streamer,
-        private readonly VideoTranscoder $transcoder,
+        private readonly TorrentJobPresenter $presenter,
     ) {}
 
     public function store(DownloadRequest $request): RedirectResponse
@@ -109,19 +109,7 @@ class LibraryDownloadController extends Controller
         abort_unless($torrentJob->type === 'download', 404);
 
         return Inertia::render('library/downloads/show', [
-            'download' => [
-                'id' => $torrentJob->id,
-                'title' => $torrentJob->title,
-                'status' => $torrentJob->status,
-                'downloaded_bytes' => $torrentJob->downloaded_bytes,
-                'total_bytes' => $torrentJob->total_bytes,
-                'is_complete' => $torrentJob->is_complete,
-                'message' => $torrentJob->message,
-                'source' => $torrentJob->source,
-                'format' => $this->formatOf($torrentJob->file_path),
-                'transcode_status' => $torrentJob->transcode_status,
-                'can_play' => $this->canPlay($torrentJob),
-            ],
+            'download' => $this->presenter->present($torrentJob),
         ]);
     }
 
@@ -133,44 +121,6 @@ class LibraryDownloadController extends Controller
         [$path, $availableBytes, $totalBytes] = $this->resolveStreamTarget($torrentJob);
 
         return $this->streamer->stream($path, $availableBytes, $totalBytes, $request->header('Range'));
-    }
-
-    /**
-     * Whether there's something worth pointing a <video> element at right
-     * now: bytes exist, and either the format is one browsers already
-     * handle natively, or transcoding has produced (or determined it
-     * doesn't need to produce) a playable file.
-     */
-    private function canPlay(TorrentJob $torrentJob): bool
-    {
-        if ($torrentJob->downloaded_bytes <= 0) {
-            return false;
-        }
-
-        if (in_array($torrentJob->transcode_status, ['completed', 'skipped'], true)) {
-            return true;
-        }
-
-        if ($torrentJob->file_path === null) {
-            return false;
-        }
-
-        // A format VideoTranscoder wouldn't need a full re-encode for
-        // ('skip' or 'remux') is one browsers can already attempt natively,
-        // even before transcoding has run — the same domain knowledge
-        // VideoTranscoder itself uses to decide what ffmpeg work is needed.
-        return $this->transcoder->planFor($torrentJob->file_path) !== 'transcode';
-    }
-
-    private function formatOf(?string $path): ?string
-    {
-        if ($path === null) {
-            return null;
-        }
-
-        $extension = pathinfo($path, PATHINFO_EXTENSION);
-
-        return $extension === '' ? null : strtoupper($extension);
     }
 
     /**

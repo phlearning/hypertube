@@ -1,7 +1,8 @@
 import { Head, router } from '@inertiajs/react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Heading from '@/components/heading';
 import { Spinner } from '@/components/ui/spinner';
+import echo from '@/echo';
 import { index } from '@/routes/library';
 import { show, stream } from '@/routes/library/downloads';
 
@@ -22,8 +23,6 @@ type Download = {
 type DownloadShowProps = {
     download: Download;
 };
-
-const POLL_INTERVAL_MS = 2000;
 
 const STATUS_LABELS: Record<string, string> = {
     queued: "En file d'attente",
@@ -55,11 +54,13 @@ function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
-export default function DownloadShow({ download }: DownloadShowProps) {
-    // A completed download still needs polling if transcoding (dispatched
-    // right as the download settles) hasn't reached its own terminal state
-    // yet — otherwise the page would never notice the video becoming
-    // playable once optimisation finishes.
+export default function DownloadShow({ download: initialDownload }: DownloadShowProps) {
+    const [download, setDownload] = useState(initialDownload);
+
+    // A completed download still needs live updates if transcoding
+    // (dispatched right as the download settles) hasn't reached its own
+    // terminal state yet — otherwise the page would never notice the video
+    // becoming playable once optimisation finishes.
     const isSettled =
         download.status === 'failed' ||
         (download.status === 'completed' &&
@@ -71,12 +72,27 @@ export default function DownloadShow({ download }: DownloadShowProps) {
             return;
         }
 
-        const interval = setInterval(() => {
-            router.reload({ only: ['download'] });
-        }, POLL_INTERVAL_MS);
+        const channelName = `torrent-job.${download.id}`;
+        echo.private(channelName)
+            .listen('.progress.updated', (payload: Download) => {
+                setDownload(payload);
+            })
+            .subscribed(() => {
+                // Closes the race between this page's server render and the
+                // channel actually becoming authorized: a progress broadcast
+                // sent during that window is missed outright (Reverb doesn't
+                // replay past messages), so a one-off catch-up fetch once
+                // subscribed — not a recurring poll — covers it.
+                router.reload({ only: ['download'] });
+            })
+            .error((status: unknown) => {
+                console.error('Failed to subscribe to torrent job progress channel.', status);
+            });
 
-        return () => clearInterval(interval);
-    }, [isSettled]);
+        return () => {
+            echo.leave(channelName);
+        };
+    }, [download.id, isSettled]);
 
     const percent =
         download.total_bytes && download.total_bytes > 0
