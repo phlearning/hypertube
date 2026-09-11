@@ -1,8 +1,9 @@
-import Heading from '@/components/heading';
-import { index } from '@/routes/library';
-import { show } from '@/routes/library/downloads';
 import { Head, router } from '@inertiajs/react';
 import { useEffect } from 'react';
+import Heading from '@/components/heading';
+import { Spinner } from '@/components/ui/spinner';
+import { index } from '@/routes/library';
+import { show, stream } from '@/routes/library/downloads';
 
 type Download = {
     id: number;
@@ -38,6 +39,7 @@ function formatBytes(bytes: number): string {
 
 export default function DownloadShow({ download }: DownloadShowProps) {
     const isSettled = download.status === 'completed' || download.status === 'failed';
+    const hasWatchableBytes = download.downloaded_bytes > 0;
 
     useEffect(() => {
         if (isSettled) {
@@ -68,6 +70,22 @@ export default function DownloadShow({ download }: DownloadShowProps) {
                     title={heading}
                     description={STATUS_LABELS[download.status] ?? download.status}
                 />
+
+                {hasWatchableBytes ? (
+                    <video
+                        controls
+                        preload="metadata"
+                        className="aspect-video w-full max-w-3xl rounded-xl border bg-black"
+                        src={stream.url(download.id)}
+                    >
+                        Votre navigateur ne prend pas en charge la lecture vidéo intégrée.
+                    </video>
+                ) : (
+                    <div className="flex aspect-video w-full max-w-3xl flex-col items-center justify-center gap-2 rounded-xl border bg-muted text-sm text-muted-foreground">
+                        <Spinner className="size-6" />
+                        En attente de données avant de pouvoir lire la vidéo…
+                    </div>
+                )}
 
                 <div className="max-w-md space-y-3 rounded-xl border bg-card p-4">
                     <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
