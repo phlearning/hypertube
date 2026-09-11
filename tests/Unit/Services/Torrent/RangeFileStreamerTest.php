@@ -19,6 +19,14 @@ function fixtureFile(string $content): string
     return $path;
 }
 
+function fixtureFileWithExtension(string $content, string $extension): string
+{
+    $path = sys_get_temp_dir().'/range_streamer_test_'.uniqid().'.'.$extension;
+    file_put_contents($path, $content);
+
+    return $path;
+}
+
 test('with no Range header, it serves the available bytes as a full 200 response', function () {
     $path = fixtureFile(str_repeat('a', 40).str_repeat('z', 60));
 
@@ -124,6 +132,56 @@ test('a malformed Range header is ignored, falling back to a full 200 response',
 
     expect($response->getStatusCode())->toBe(200)
         ->and($response->headers->get('Content-Length'))->toBe('40');
+
+    unlink($path);
+});
+
+test('an mp4 file is served with a video/mp4 Content-Type, not the generic octet-stream', function () {
+    $path = fixtureFileWithExtension(str_repeat('a', 40), 'mp4');
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 40, totalBytes: 40, rangeHeader: null);
+
+    expect($response->headers->get('Content-Type'))->toBe('video/mp4');
+
+    unlink($path);
+});
+
+test('recognised video extensions each resolve to their own video/* Content-Type', function () {
+    $cases = [
+        'mkv' => 'video/x-matroska',
+        'avi' => 'video/x-msvideo',
+        'webm' => 'video/webm',
+        'mov' => 'video/quicktime',
+        'ogv' => 'video/ogg',
+    ];
+
+    foreach ($cases as $extension => $expectedContentType) {
+        $path = fixtureFileWithExtension('x', $extension);
+
+        $response = (new RangeFileStreamer)->stream($path, availableBytes: 1, totalBytes: 1, rangeHeader: null);
+
+        expect($response->headers->get('Content-Type'))->toBe($expectedContentType);
+
+        unlink($path);
+    }
+});
+
+test('an unrecognised extension falls back to application/octet-stream', function () {
+    $path = fixtureFileWithExtension('x', 'bin');
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 1, totalBytes: 1, rangeHeader: null);
+
+    expect($response->headers->get('Content-Type'))->toBe('application/octet-stream');
+
+    unlink($path);
+});
+
+test('extension matching is case-insensitive', function () {
+    $path = fixtureFileWithExtension(str_repeat('a', 40), 'MP4');
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 40, totalBytes: 40, rangeHeader: null);
+
+    expect($response->headers->get('Content-Type'))->toBe('video/mp4');
 
     unlink($path);
 });

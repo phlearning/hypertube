@@ -173,7 +173,15 @@ def handle_download(job_id: str, torrent_url: str) -> None:
     last_done = 0
     last_progress_at = time.time()
     status = handle.status()
-    while not status.is_seeding:
+    downloaded = contiguous_bytes_done(status, info, target_index)
+    # Deliberately NOT status.is_seeding: with other files deselected via
+    # prioritize_files(), is_seeding can fail to ever turn true even once the
+    # target file itself is fully downloaded and hash-verified (observed
+    # live against a real archive.org multi-file torrent) — some boundary or
+    # housekeeping state on the deselected files apparently keeps the whole
+    # torrent from reporting as finished. Whether the file we actually want
+    # is done is a direct, reliable question this function already answers.
+    while downloaded < file_size:
         done = status.total_wanted_done
         if done > last_done:
             last_done = done
@@ -182,7 +190,7 @@ def handle_download(job_id: str, torrent_url: str) -> None:
             report(
                 job_id,
                 status="downloading",
-                downloaded_bytes=contiguous_bytes_done(status, info, target_index),
+                downloaded_bytes=downloaded,
                 total_bytes=file_size,
                 is_complete=False,
             )
@@ -192,6 +200,7 @@ def handle_download(job_id: str, torrent_url: str) -> None:
             return
         time.sleep(POLL_INTERVAL_SECONDS)
         status = handle.status()
+        downloaded = contiguous_bytes_done(status, info, target_index)
 
     report(
         job_id,

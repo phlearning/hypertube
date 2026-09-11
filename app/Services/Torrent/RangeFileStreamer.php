@@ -10,6 +10,22 @@ class RangeFileStreamer
     private const CHUNK_SIZE = 1024 * 1024;
 
     /**
+     * Firefox (unlike Chromium, which sniffs the bytes) refuses to even
+     * attempt playback of a <video> source served as application/octet-stream
+     * — it needs a real video/* Content-Type to try at all.
+     *
+     * @var array<string, string>
+     */
+    private const CONTENT_TYPES = [
+        'mp4' => 'video/mp4',
+        'mkv' => 'video/x-matroska',
+        'avi' => 'video/x-msvideo',
+        'webm' => 'video/webm',
+        'mov' => 'video/quicktime',
+        'ogv' => 'video/ogg',
+    ];
+
+    /**
      * Serve a slice of a file over HTTP, honouring the Range protocol while
      * never reading past $availableBytes — the caller's guarantee of how
      * much of the file is safe to read (e.g. a torrent's downloaded_bytes).
@@ -29,7 +45,7 @@ class RangeFileStreamer
             $isPartial ? 206 : 200,
         );
 
-        $response->headers->set('Content-Type', 'application/octet-stream');
+        $response->headers->set('Content-Type', $this->resolveContentType($path));
         $response->headers->set('Accept-Ranges', 'bytes');
         $response->headers->set('Content-Length', (string) $length);
 
@@ -98,6 +114,13 @@ class RangeFileStreamer
     private function unsatisfiable(): array
     {
         return [0, 0, false, false];
+    }
+
+    private function resolveContentType(string $path): string
+    {
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        return self::CONTENT_TYPES[$extension] ?? 'application/octet-stream';
     }
 
     private function notSatisfiableResponse(?int $totalBytes): Response
