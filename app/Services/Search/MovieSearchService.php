@@ -41,6 +41,7 @@ class MovieSearchService
                 ];
 
                 $results = $this->enricher->enrich($results);
+                $results = $this->group($results);
                 $results = $this->filter($results, $criteria);
 
                 return $this->sort($results, $criteria);
@@ -60,6 +61,80 @@ class MovieSearchService
             $criteria->minRating,
             $criteria->year,
         ]));
+    }
+
+    /**
+     * Collapse the same movie found across multiple sources into a single
+     * entry carrying every source's torrent as a download candidate. Movies
+     * are matched by title, and by year only when both sides report one —
+     * PublicDomainTorrents never reports a year, so a null year is treated as
+     * a wildcard, but two entries sharing a title with two different known
+     * years (e.g. an original and a remake) are kept as separate movies
+     * rather than silently merging one film's torrent into another's.
+     *
+     * @param  array<int, array<string, mixed>>  $movies
+     * @return array<int, array<string, mixed>>
+     */
+    private function group(array $movies): array
+    {
+        $groups = [];
+
+        foreach ($movies as $movie) {
+            $titleKey = mb_strtolower(trim((string) $movie['title']));
+            $index = $this->findCompatibleGroup($groups, $titleKey, $movie['year']);
+
+            /** @var array<string, mixed> $group */
+            $group = $index === null ? [
+                'title_key' => $titleKey,
+                'title' => $movie['title'],
+                'year' => null,
+                'rating' => null,
+                'poster' => null,
+                'genre' => null,
+                'popularity' => 0,
+                'candidates' => [],
+            ] : $groups[$index];
+
+            $group['year'] ??= $movie['year'];
+            $group['rating'] ??= $movie['rating'];
+            $group['poster'] ??= $movie['poster'];
+            $group['genre'] ??= $movie['genre'];
+            $group['popularity'] = max($group['popularity'], $movie['popularity']);
+            $group['candidates'][] = [
+                'source' => $movie['source'],
+                'source_id' => $movie['source_id'],
+                'torrent_url' => $movie['torrent_url'],
+            ];
+
+            if ($index === null) {
+                $groups[] = $group;
+            } else {
+                $groups[$index] = $group;
+            }
+        }
+
+        return array_values(array_map(
+            fn (array $group) => array_diff_key($group, ['title_key' => null]),
+            $groups
+        ));
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $groups
+     */
+    private function findCompatibleGroup(array $groups, string $titleKey, ?int $year): ?int
+    {
+        foreach ($groups as $index => $group) {
+            if ($group['title_key'] !== $titleKey) {
+                continue;
+            }
+
+            if ($group['year'] === null || $year === null || $group['year'] === $year) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 
     /**

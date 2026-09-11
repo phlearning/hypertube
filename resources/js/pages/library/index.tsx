@@ -4,16 +4,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import LibraryController from '@/actions/App/Http/Controllers/LibraryController';
+import LibraryDownloadController from '@/actions/App/Http/Controllers/LibraryDownloadController';
 import { index } from '@/routes/library';
 import { Film, Star } from 'lucide-react';
 import { Form, Head, InfiniteScroll, Link } from '@inertiajs/react';
+import { Fragment } from 'react';
+
+type TorrentCandidate = {
+    source: string;
+    source_id: string;
+    torrent_url: string;
+};
 
 type Movie = {
     title: string;
     year: number | null;
-    source: string;
-    source_id: string;
-    torrent_url: string;
+    candidates: TorrentCandidate[];
     popularity: number;
     rating: number | null;
     poster: string | null;
@@ -66,6 +72,45 @@ function MovieCard({ movie }: { movie: Movie }) {
                         </span>
                     )}
                 </div>
+
+                <Form
+                    {...LibraryDownloadController.store.form()}
+                    options={{ preserveScroll: true }}
+                    className="mt-2"
+                >
+                    {({ processing }) => (
+                        <>
+                            <input type="hidden" name="title" value={movie.title} />
+                            {movie.candidates.map((candidate, i) => (
+                                <Fragment key={`${candidate.source}:${candidate.source_id}`}>
+                                    <input
+                                        type="hidden"
+                                        name={`candidates[${i}][source]`}
+                                        value={candidate.source}
+                                    />
+                                    <input
+                                        type="hidden"
+                                        name={`candidates[${i}][source_id]`}
+                                        value={candidate.source_id}
+                                    />
+                                    <input
+                                        type="hidden"
+                                        name={`candidates[${i}][torrent_url]`}
+                                        value={candidate.torrent_url}
+                                    />
+                                </Fragment>
+                            ))}
+                            <Button
+                                type="submit"
+                                size="sm"
+                                className="w-full"
+                                disabled={processing}
+                            >
+                                {processing ? 'Démarrage…' : 'Regarder'}
+                            </Button>
+                        </>
+                    )}
+                </Form>
             </div>
         </div>
     );
@@ -226,7 +271,7 @@ export default function LibraryIndex({ movies, filters }: LibraryIndexProps) {
                         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                             {movies.data.map((movie) => (
                                 <MovieCard
-                                    key={`${movie.source}:${movie.source_id}`}
+                                    key={`${movie.title}:${movie.year ?? ''}`}
                                     movie={movie}
                                 />
                             ))}

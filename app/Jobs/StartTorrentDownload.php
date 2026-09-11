@@ -6,28 +6,22 @@ use App\Models\TorrentJob;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Str;
 
-class PingTorrentWorker implements ShouldQueue
+class StartTorrentDownload implements ShouldQueue
 {
     use Queueable;
+
+    public function __construct(private readonly TorrentJob $torrentJob) {}
 
     /**
      * Execute the job.
      */
     public function handle(): void
     {
-        $jobId = (string) Str::uuid();
-
-        TorrentJob::create([
-            'job_id' => $jobId,
-            'type' => 'ping',
-            'status' => 'pending',
-        ]);
-
         Redis::rpush('torrent:jobs', json_encode([
-            'job_id' => $jobId,
-            'type' => 'ping',
+            'job_id' => $this->torrentJob->job_id,
+            'type' => 'download',
+            'torrent_url' => $this->torrentJob->torrent_url,
         ]));
     }
 }

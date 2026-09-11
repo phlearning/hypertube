@@ -7,8 +7,8 @@ from urllib.parse import unquote_to_bytes
 TORRENT_PATH = "/shared/fixture.torrent"
 PEER_TTL_SECONDS = 3600
 
-# info_hash(bytes) -> {(ip, port): last_seen_timestamp}
-SWARMS: dict[bytes, dict[tuple[str, int], float]] = {}
+# info_hash(bytes) -> {(ip, port): {"left": int, "seen": float}}
+SWARMS: dict[bytes, dict[tuple[str, int], dict]] = {}
 
 
 def bencode(value):
@@ -67,6 +67,10 @@ class TrackerHandler(BaseHTTPRequestHandler):
         except ValueError:
             self.send_error(400, "invalid port")
             return
+        try:
+            left = int(params.get(b"left", b"0") or b"0")
+        except ValueError:
+            left = 0
         if not info_hash or not peer_id or not port:
             self.send_error(400, "missing info_hash/peer_id/port")
             return
@@ -74,9 +78,9 @@ class TrackerHandler(BaseHTTPRequestHandler):
         ip = self.client_address[0]
         now = time.time()
         swarm = SWARMS.setdefault(info_hash, {})
-        swarm[(ip, port)] = now
-        for key, seen in list(swarm.items()):
-            if now - seen > PEER_TTL_SECONDS:
+        swarm[(ip, port)] = {"left": left, "seen": now}
+        for key, peer in list(swarm.items()):
+            if now - peer["seen"] > PEER_TTL_SECONDS:
                 del swarm[key]
         if not swarm:
             del SWARMS[info_hash]
@@ -85,7 +89,14 @@ class TrackerHandler(BaseHTTPRequestHandler):
             socket.inet_aton(peer_ip) + struct.pack(">H", peer_port)
             for (peer_ip, peer_port) in swarm
         )
-        body = bencode({b"interval": 1800, b"peers": compact_peers})
+        complete = sum(1 for peer in swarm.values() if peer["left"] == 0)
+        incomplete = len(swarm) - complete
+        body = bencode({
+            b"interval": 1800,
+            b"complete": complete,
+            b"incomplete": incomplete,
+            b"peers": compact_peers,
+        })
         self.send_response(200)
         self.send_header("Content-Type", "text/plain")
         self.send_header("Content-Length", str(len(body)))

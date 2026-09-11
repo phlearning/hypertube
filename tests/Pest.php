@@ -48,3 +48,13 @@ function something()
 {
     // ..
 }
+
+function bstr(string $value): string
+{
+    return strlen($value).':'.$value;
+}
+
+function bint(int $value): string
+{
+    return 'i'.$value.'e';
+}
