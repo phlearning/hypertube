@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 import time
 
 import libtorrent as lt
@@ -53,9 +54,12 @@ def handle_download(job_id: str, torrent_url: str) -> None:
         report(job_id, status="failed", message=f"could not fetch torrent: {exc}")
         return
 
+    # Port 0 lets the OS assign an ephemeral port per session, since multiple
+    # downloads now run concurrently in this same process (each needs its own
+    # libtorrent session, and a fixed port would collide across them).
     session = lt.session(
         {
-            "listen_interfaces": "0.0.0.0:6882",
+            "listen_interfaces": "0.0.0.0:0",
             "enable_dht": False,
             "enable_lsd": False,
             "enable_natpmp": False,
@@ -118,6 +122,18 @@ def handle_job(job: dict) -> None:
         report(job_id, status="failed", message=f"unknown job type: {job_type}")
 
 
+def run_job(job: dict, job_id: str) -> None:
+    try:
+        handle_job(job)
+        print(f"job {job_id} handled", flush=True)
+    except Exception as exc:  # noqa: BLE001 - one bad job must not kill the worker
+        print(f"job {job_id} raised {exc!r}", flush=True)
+        try:
+            report(job_id, status="failed", message=str(exc))
+        except requests.RequestException as report_exc:
+            print(f"job {job_id} could not report failure: {report_exc}", flush=True)
+
+
 def main() -> None:
     client = connect_redis()
     print(f"worker ready, watching queue '{JOBS_QUEUE}'", flush=True)
@@ -132,15 +148,10 @@ def main() -> None:
         except (json.JSONDecodeError, KeyError) as exc:
             print(f"discarding malformed job payload {raw_payload!r}: {exc}", flush=True)
             continue
-        try:
-            handle_job(job)
-            print(f"job {job_id} handled", flush=True)
-        except Exception as exc:  # noqa: BLE001 - one bad job must not kill the worker loop
-            print(f"job {job_id} raised {exc!r}", flush=True)
-            try:
-                report(job_id, status="failed", message=str(exc))
-            except requests.RequestException as report_exc:
-                print(f"job {job_id} could not report failure: {report_exc}", flush=True)
+        # Laravel already caps how many downloads it hands out at once (see
+        # DownloadScheduler); this loop just needs to not serialize them
+        # behind one another, so each job runs in its own thread.
+        threading.Thread(target=run_job, args=(job, job_id), daemon=True).start()
 
 
 if __name__ == "__main__":

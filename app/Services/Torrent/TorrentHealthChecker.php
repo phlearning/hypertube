@@ -10,11 +10,11 @@ class TorrentHealthChecker
     private const PEER_ID_PREFIX = '-HT0001-';
 
     /**
-     * @return array{seeders: int, peers: int, name: string, format: string}
+     * @return array{seeders: int, peers: int, name: string, format: string, info_hash: string}
      */
     public function check(string $torrentUrl): array
     {
-        $empty = ['seeders' => 0, 'peers' => 0, 'name' => '', 'format' => ''];
+        $empty = ['seeders' => 0, 'peers' => 0, 'name' => '', 'format' => '', 'info_hash' => ''];
 
         $torrent = $this->fetchTorrentFile($torrentUrl);
 
@@ -23,14 +23,15 @@ class TorrentHealthChecker
         }
 
         $format = self::formatFromName($torrent->name);
+        $infoHash = $torrent->infoHashHex();
 
         if ($torrent->announce === '') {
-            return [...$empty, 'name' => $torrent->name, 'format' => $format];
+            return [...$empty, 'name' => $torrent->name, 'format' => $format, 'info_hash' => $infoHash];
         }
 
         [$seeders, $peers] = $this->announce($torrent);
 
-        return ['seeders' => $seeders, 'peers' => $peers, 'name' => $torrent->name, 'format' => $format];
+        return ['seeders' => $seeders, 'peers' => $peers, 'name' => $torrent->name, 'format' => $format, 'info_hash' => $infoHash];
     }
 
     private function fetchTorrentFile(string $torrentUrl): ?TorrentFile

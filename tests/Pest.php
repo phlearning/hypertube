@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\TorrentJob;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /*
@@ -57,4 +59,17 @@ function bstr(string $value): string
 function bint(int $value): string
 {
     return 'i'.$value.'e';
+}
+
+function makeTorrentJob(array $overrides = []): TorrentJob
+{
+    return TorrentJob::create(array_merge([
+        'job_id' => (string) Str::uuid(),
+        'type' => 'download',
+        'title' => 'Movie',
+        'status' => 'queued',
+        'torrent_url' => 'http://source.test/movie.torrent',
+        'info_hash' => Str::random(40),
+        'remaining_candidates' => [],
+    ], $overrides));
 }

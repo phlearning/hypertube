@@ -19,14 +19,23 @@ final class TorrentCandidateSelector
      */
     public function selectBest(array $candidates): ?array
     {
-        if ($candidates === []) {
-            return null;
-        }
+        return $this->rank($candidates)[0] ?? null;
+    }
 
+    /**
+     * Sort every candidate best-first (same ordering as selectBest), instead
+     * of returning only the winner — used to build a fallback chain to try
+     * in order if the best candidate turns out to be dead.
+     *
+     * @param  array<int, array<string, mixed>>  $candidates
+     * @return array<int, array<string, mixed>>
+     */
+    public function rank(array $candidates): array
+    {
         usort($candidates, fn (array $a, array $b) => [$b['seeders'] ?? 0, $b['peers'] ?? 0, self::formatRank($b['format'] ?? '')]
             <=> [$a['seeders'] ?? 0, $a['peers'] ?? 0, self::formatRank($a['format'] ?? '')]);
 
-        return $candidates[0];
+        return $candidates;
     }
 
     private static function formatRank(string $format): int

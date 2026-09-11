@@ -63,9 +63,55 @@ test('an authenticated user can start a download and the healthiest candidate is
         ->type->toBe('download')
         ->title->toBe('Movie')
         ->status->toBe('pending')
-        ->torrent_url->toBe('http://source-b.test/movie.torrent');
+        ->torrent_url->toBe('http://source-b.test/movie.torrent')
+        ->info_hash->not->toBeEmpty();
 
     Queue::assertPushed(StartTorrentDownload::class);
+});
+
+test('two requests for the same movie deduplicate onto a single active download', function () {
+    Queue::fake();
+    fakeDownloadCandidatesHttp();
+    $user = User::factory()->create();
+
+    $payload = [
+        'title' => 'Movie',
+        'candidates' => [
+            ['source' => 'source_b', 'source_id' => '2', 'torrent_url' => 'http://source-b.test/movie.torrent'],
+        ],
+    ];
+
+    $first = $this->actingAs($user)->post(route('library.downloads.store'), $payload);
+    $second = $this->actingAs($user)->post(route('library.downloads.store'), $payload);
+
+    expect(TorrentJob::count())->toBe(1);
+
+    $torrentJob = TorrentJob::sole();
+    $first->assertRedirect(route('library.downloads.show', $torrentJob));
+    $second->assertRedirect(route('library.downloads.show', $torrentJob));
+
+    Queue::assertPushed(StartTorrentDownload::class, 1);
+});
+
+test('a 4th concurrent download request is queued instead of started immediately', function () {
+    Queue::fake();
+    fakeDownloadCandidatesHttp();
+    $user = User::factory()->create();
+
+    makeTorrentJob(['title' => 'Other 1', 'status' => 'pending']);
+    makeTorrentJob(['title' => 'Other 2', 'status' => 'downloading']);
+    makeTorrentJob(['title' => 'Other 3', 'status' => 'pending']);
+
+    $this->actingAs($user)->post(route('library.downloads.store'), [
+        'title' => 'Movie',
+        'candidates' => [
+            ['source' => 'source_b', 'source_id' => '2', 'torrent_url' => 'http://source-b.test/movie.torrent'],
+        ],
+    ]);
+
+    $fourth = TorrentJob::where('title', 'Movie')->sole();
+    expect($fourth->status)->toBe('queued');
+    Queue::assertNotPushed(StartTorrentDownload::class);
 });
 
 test('more than 5 candidates are rejected', function () {
