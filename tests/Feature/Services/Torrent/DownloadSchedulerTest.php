@@ -44,6 +44,7 @@ test('handleFailedAttempt advances to the next candidate when one remains', func
     expect($job->fresh())
         ->status->toBe('pending')
         ->torrent_url->toBe('http://source-b.test/movie.torrent')
+        ->source->toBe('b')
         ->info_hash->toBe('aaaa')
         ->remaining_candidates->toBe([]);
     Queue::assertPushed(StartTorrentDownload::class);

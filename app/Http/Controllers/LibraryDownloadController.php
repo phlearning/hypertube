@@ -8,6 +8,7 @@ use App\Services\Torrent\DownloadScheduler;
 use App\Services\Torrent\RangeFileStreamer;
 use App\Services\Torrent\TorrentCandidateSelector;
 use App\Services\Torrent\TorrentHealthChecker;
+use App\Services\Torrent\VideoTranscoder;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class LibraryDownloadController extends Controller
         private readonly TorrentCandidateSelector $selector,
         private readonly DownloadScheduler $scheduler,
         private readonly RangeFileStreamer $streamer,
+        private readonly VideoTranscoder $transcoder,
     ) {}
 
     public function store(DownloadRequest $request): RedirectResponse
@@ -79,6 +81,7 @@ class LibraryDownloadController extends Controller
                     'title' => $title,
                     'status' => 'queued',
                     'torrent_url' => $first['torrent_url'],
+                    'source' => $first['source'],
                     'info_hash' => $first['info_hash'],
                     'remaining_candidates' => $chain,
                 ]);
@@ -114,6 +117,10 @@ class LibraryDownloadController extends Controller
                 'total_bytes' => $torrentJob->total_bytes,
                 'is_complete' => $torrentJob->is_complete,
                 'message' => $torrentJob->message,
+                'source' => $torrentJob->source,
+                'format' => $this->formatOf($torrentJob->file_path),
+                'transcode_status' => $torrentJob->transcode_status,
+                'can_play' => $this->canPlay($torrentJob),
             ],
         ]);
     }
@@ -123,11 +130,69 @@ class LibraryDownloadController extends Controller
         abort_unless($torrentJob->type === 'download', 404);
         abort_if($torrentJob->file_path === null, 404);
 
-        return $this->streamer->stream(
-            $torrentJob->file_path,
-            $torrentJob->downloaded_bytes,
-            $torrentJob->total_bytes,
-            $request->header('Range'),
-        );
+        [$path, $availableBytes, $totalBytes] = $this->resolveStreamTarget($torrentJob);
+
+        return $this->streamer->stream($path, $availableBytes, $totalBytes, $request->header('Range'));
+    }
+
+    /**
+     * Whether there's something worth pointing a <video> element at right
+     * now: bytes exist, and either the format is one browsers already
+     * handle natively, or transcoding has produced (or determined it
+     * doesn't need to produce) a playable file.
+     */
+    private function canPlay(TorrentJob $torrentJob): bool
+    {
+        if ($torrentJob->downloaded_bytes <= 0) {
+            return false;
+        }
+
+        if (in_array($torrentJob->transcode_status, ['completed', 'skipped'], true)) {
+            return true;
+        }
+
+        if ($torrentJob->file_path === null) {
+            return false;
+        }
+
+        // A format VideoTranscoder wouldn't need a full re-encode for
+        // ('skip' or 'remux') is one browsers can already attempt natively,
+        // even before transcoding has run — the same domain knowledge
+        // VideoTranscoder itself uses to decide what ffmpeg work is needed.
+        return $this->transcoder->planFor($torrentJob->file_path) !== 'transcode';
+    }
+
+    private function formatOf(?string $path): ?string
+    {
+        if ($path === null) {
+            return null;
+        }
+
+        $extension = pathinfo($path, PATHINFO_EXTENSION);
+
+        return $extension === '' ? null : strtoupper($extension);
+    }
+
+    /**
+     * @return array{0: string, 1: int, 2: ?int}
+     */
+    private function resolveStreamTarget(TorrentJob $torrentJob): array
+    {
+        if ($torrentJob->playback_path === null) {
+            return [$torrentJob->file_path, $torrentJob->downloaded_bytes, $torrentJob->total_bytes];
+        }
+
+        // The transcoded output is only ever written once fully done
+        // (transcoding starts after the source download itself completes),
+        // so it's always safe to serve in full. Its size is unrelated to
+        // downloaded_bytes/total_bytes, which describe the original,
+        // pre-transcode file.
+        $size = @filesize($torrentJob->playback_path);
+
+        if ($size === false) {
+            return [$torrentJob->playback_path, 0, null];
+        }
+
+        return [$torrentJob->playback_path, $size, $size];
     }
 }

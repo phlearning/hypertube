@@ -91,3 +91,24 @@ test('a Range request starting beyond the downloaded portion is rejected with 41
 
     unlink($torrentJob->file_path);
 });
+
+test('once transcoded, the endpoint serves playback_path in full, not the original file_path', function () {
+    $user = User::factory()->create();
+    // The original download: only partially "safe" per downloaded_bytes.
+    $torrentJob = makeStreamableTorrentJob(str_repeat('a', 100), downloadedBytes: 40);
+
+    $transcodedPath = tempnam(sys_get_temp_dir(), 'stream_feature_transcoded_');
+    file_put_contents($transcodedPath, str_repeat('b', 55));
+    $torrentJob->update(['playback_path' => $transcodedPath]);
+
+    $response = $this
+        ->actingAs($user)
+        ->get(route('library.downloads.stream', $torrentJob))
+        ->assertOk();
+
+    expect($response->headers->get('Content-Length'))->toBe('55')
+        ->and($response->streamedContent())->toBe(str_repeat('b', 55));
+
+    unlink($torrentJob->file_path);
+    unlink($transcodedPath);
+});

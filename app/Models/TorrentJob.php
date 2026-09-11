@@ -25,12 +25,15 @@ class TorrentJob extends Model
         'status',
         'message',
         'torrent_url',
+        'source',
         'info_hash',
         'remaining_candidates',
         'downloaded_bytes',
         'total_bytes',
         'is_complete',
         'file_path',
+        'playback_path',
+        'transcode_status',
     ];
 
     protected $casts = [

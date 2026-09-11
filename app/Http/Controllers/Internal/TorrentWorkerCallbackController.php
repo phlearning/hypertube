@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Internal;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\TranscodeVideo;
 use App\Models\TorrentJob;
 use App\Services\Torrent\DownloadScheduler;
 use Illuminate\Http\JsonResponse;
@@ -63,6 +64,7 @@ class TorrentWorkerCallbackController extends Controller
 
         if ($torrentJob->type === 'download' && $validated['status'] === 'completed') {
             $this->scheduler->handleCompleted();
+            TranscodeVideo::dispatch($torrentJob);
         }
 
         return response()->json(['status' => 'ok']);
