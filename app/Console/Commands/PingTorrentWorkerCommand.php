@@ -18,6 +18,6 @@ class PingTorrentWorkerCommand extends Command
     {
         PingTorrentWorker::dispatch();
 
-        $this->info('Ping dispatched. Check the worker_pings table for its resolution.');
+        $this->info('Ping dispatched. Check the torrent_jobs table for its resolution.');
     }
 }

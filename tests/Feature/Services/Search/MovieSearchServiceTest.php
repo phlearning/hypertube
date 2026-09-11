@@ -56,6 +56,59 @@ test('it filters by minimum year', function () {
     expect(collect($results->items())->pluck('title')->all())->toBe(['Apple Orchard']);
 });
 
+test('it groups the same movie found on both sources into one entry with a candidate per source', function () {
+    config(['services.omdb.key' => 'test-key']);
+
+    Http::fake([
+        'archive.org/advancedsearch.php*' => Http::response([
+            'response' => ['docs' => [
+                ['identifier' => 'night-of-the-living-dead', 'title' => 'Night of the Living Dead', 'year' => 1968, 'downloads' => 500000],
+            ]],
+        ]),
+        'publicdomaintorrents.info/nshowcat.html*' => Http::response(
+            '<a href="nshowmovie.html?movieid=1">Night of the Living Dead</a>'
+        ),
+        'omdbapi.com/*' => Http::response(['Response' => 'False']),
+    ]);
+
+    $results = app(MovieSearchService::class)->search(MovieSearchCriteria::fromArray([]));
+
+    expect($results->items())->toHaveCount(1);
+
+    $movie = $results->items()[0];
+    expect($movie['title'])->toBe('Night of the Living Dead')
+        ->and($movie['year'])->toBe(1968)
+        ->and($movie['candidates'])->toHaveCount(2)
+        ->and(collect($movie['candidates'])->pluck('source')->all())
+        ->toEqualCanonicalizing(['archive_org', 'public_domain_torrents']);
+});
+
+test('it keeps two different movies that share a title but have different known years separate', function () {
+    config(['services.omdb.key' => 'test-key']);
+
+    Http::fake([
+        'archive.org/advancedsearch.php*' => Http::response([
+            'response' => ['docs' => [
+                ['identifier' => 'the-thing-1982', 'title' => 'The Thing', 'year' => 1982, 'downloads' => 100],
+                ['identifier' => 'the-thing-2011', 'title' => 'The Thing', 'year' => 2011, 'downloads' => 50],
+            ]],
+        ]),
+        'publicdomaintorrents.info/nshowcat.html*' => Http::response('<html></html>'),
+        'omdbapi.com/*' => Http::response(['Response' => 'False']),
+    ]);
+
+    $results = app(MovieSearchService::class)->search(MovieSearchCriteria::fromArray([]));
+
+    expect($results->items())->toHaveCount(2);
+
+    $years = collect($results->items())->pluck('year')->all();
+    expect($years)->toEqualCanonicalizing([1982, 2011]);
+
+    foreach ($results->items() as $movie) {
+        expect($movie['candidates'])->toHaveCount(1);
+    }
+});
+
 test('it paginates results', function () {
     fakeSearchHttp();
 
