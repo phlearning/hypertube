@@ -64,6 +64,7 @@ test('an authenticated user can start a download and the healthiest candidate is
         ->title->toBe('Movie')
         ->status->toBe('pending')
         ->torrent_url->toBe('http://source-b.test/movie.torrent')
+        ->source->toBe('source_b')
         ->info_hash->not->toBeEmpty();
 
     Queue::assertPushed(StartTorrentDownload::class);
@@ -154,8 +155,11 @@ test('an authenticated user can see a download status page', function () {
         'type' => 'download',
         'status' => 'downloading',
         'torrent_url' => 'http://source-a.test/movie.torrent',
+        'source' => 'archive_org',
         'downloaded_bytes' => 42,
         'total_bytes' => 100,
+        'file_path' => '/shared/Movie/Movie.mkv',
+        'transcode_status' => 'processing',
     ]);
 
     $this
@@ -168,7 +172,43 @@ test('an authenticated user can see a download status page', function () {
                 ->where('download.status', 'downloading')
                 ->where('download.downloaded_bytes', 42)
                 ->where('download.total_bytes', 100)
+                ->where('download.source', 'archive_org')
+                ->where('download.format', 'MKV')
+                ->where('download.transcode_status', 'processing')
         );
+});
+
+test('can_play reflects whether the format is natively playable or transcoding has produced something playable', function () {
+    $user = User::factory()->create();
+
+    $cases = [
+        // [downloaded_bytes, file_path, transcode_status, expected can_play]
+        [0, '/shared/Movie/Movie.mp4', null, false],
+        [10, '/shared/Movie/Movie.mp4', null, true],
+        [10, '/shared/Movie/Movie.webm', null, true],
+        [10, '/shared/Movie/Movie.mkv', null, false],
+        [10, '/shared/Movie/Movie.mkv', 'processing', false],
+        [10, '/shared/Movie/Movie.mkv', 'completed', true],
+        [10, '/shared/Movie/Movie.mkv', 'failed', false],
+        [10, '/shared/Movie/Movie.webm', 'skipped', true],
+    ];
+
+    foreach ($cases as [$downloadedBytes, $filePath, $transcodeStatus, $expected]) {
+        $torrentJob = TorrentJob::create([
+            'job_id' => (string) Str::uuid(),
+            'type' => 'download',
+            'status' => 'downloading',
+            'torrent_url' => 'http://source-a.test/movie.torrent',
+            'downloaded_bytes' => $downloadedBytes,
+            'file_path' => $filePath,
+            'transcode_status' => $transcodeStatus,
+        ]);
+
+        $this
+            ->actingAs($user)
+            ->get(route('library.downloads.show', $torrentJob))
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('download.can_play', $expected));
+    }
 });
 
 test('a ping job cannot be viewed as a download', function () {

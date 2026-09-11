@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\TranscodeVideo;
 use App\Models\TorrentJob;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -178,6 +179,42 @@ test('a completed callback promotes the oldest queued download into the freed sl
         ->assertOk();
 
     expect($queued->fresh()->status)->toBe('pending');
+});
+
+test('a completed download callback dispatches a TranscodeVideo job', function () {
+    config(['services.torrent_worker.secret' => 'test-secret']);
+    Queue::fake();
+    $job = makeTorrentJob(['status' => 'downloading']);
+
+    $this
+        ->withHeader('Authorization', 'Bearer test-secret')
+        ->postJson('/internal/torrent-worker/callback', [
+            'job_id' => $job->job_id,
+            'status' => 'completed',
+            'downloaded_bytes' => 100,
+            'total_bytes' => 100,
+            'is_complete' => true,
+            'file_path' => '/shared/movie.mkv',
+        ])
+        ->assertOk();
+
+    Queue::assertPushed(TranscodeVideo::class);
+});
+
+test('a completed ping callback does not dispatch a TranscodeVideo job', function () {
+    config(['services.torrent_worker.secret' => 'test-secret']);
+    Queue::fake();
+    $job = TorrentJob::create(['job_id' => (string) Str::uuid(), 'type' => 'ping', 'status' => 'pending']);
+
+    $this
+        ->withHeader('Authorization', 'Bearer test-secret')
+        ->postJson('/internal/torrent-worker/callback', [
+            'job_id' => $job->job_id,
+            'status' => 'completed',
+        ])
+        ->assertOk();
+
+    Queue::assertNotPushed(TranscodeVideo::class);
 });
 
 test('a late or duplicate callback for an already terminal job is ignored', function () {

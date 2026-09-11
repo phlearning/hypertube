@@ -59,6 +59,7 @@ class DownloadScheduler
         // the next candidate's first progress report stream the wrong file.
         $job->update([
             'torrent_url' => $next['torrent_url'],
+            'source' => $next['source'],
             'remaining_candidates' => $remaining,
             'message' => $message,
             'file_path' => null,

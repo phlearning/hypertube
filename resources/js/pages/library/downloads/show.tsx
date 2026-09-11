@@ -13,6 +13,10 @@ type Download = {
     total_bytes: number | null;
     is_complete: boolean;
     message: string | null;
+    source: string | null;
+    format: string | null;
+    transcode_status: string | null;
+    can_play: boolean;
 };
 
 type DownloadShowProps = {
@@ -29,6 +33,20 @@ const STATUS_LABELS: Record<string, string> = {
     failed: 'Échec',
 };
 
+const SOURCE_LABELS: Record<string, string> = {
+    archive_org: 'Archive.org',
+    public_domain_torrents: 'PublicDomainTorrents.info',
+};
+
+const TRANSCODE_STATUS_LABELS: Record<string, string> = {
+    processing: 'Optimisation de la vidéo en cours…',
+    completed: 'Vidéo optimisée pour la lecture',
+    failed: "Échec de l'optimisation vidéo",
+    skipped: 'Format déjà compatible, aucune conversion nécessaire',
+};
+
+const TRANSCODE_TERMINAL_STATUSES = ['completed', 'skipped', 'failed'];
+
 function formatBytes(bytes: number): string {
     if (bytes < 1024 * 1024) {
         return `${(bytes / 1024).toFixed(0)} Ko`;
@@ -38,8 +56,15 @@ function formatBytes(bytes: number): string {
 }
 
 export default function DownloadShow({ download }: DownloadShowProps) {
-    const isSettled = download.status === 'completed' || download.status === 'failed';
-    const hasWatchableBytes = download.downloaded_bytes > 0;
+    // A completed download still needs polling if transcoding (dispatched
+    // right as the download settles) hasn't reached its own terminal state
+    // yet — otherwise the page would never notice the video becoming
+    // playable once optimisation finishes.
+    const isSettled =
+        download.status === 'failed' ||
+        (download.status === 'completed' &&
+            download.transcode_status !== null &&
+            TRANSCODE_TERMINAL_STATUSES.includes(download.transcode_status));
 
     useEffect(() => {
         if (isSettled) {
@@ -60,6 +85,13 @@ export default function DownloadShow({ download }: DownloadShowProps) {
 
     const heading = download.title ?? 'Téléchargement';
 
+    const waitingReason =
+        download.downloaded_bytes === 0
+            ? 'En attente de données avant de pouvoir lire la vidéo…'
+            : download.transcode_status === 'failed'
+              ? "Échec de l'optimisation vidéo : la lecture n'est pas possible."
+              : 'Conversion de la vidéo pour la lecture…';
+
     return (
         <>
             <Head title={heading} />
@@ -71,7 +103,7 @@ export default function DownloadShow({ download }: DownloadShowProps) {
                     description={STATUS_LABELS[download.status] ?? download.status}
                 />
 
-                {hasWatchableBytes ? (
+                {download.can_play ? (
                     <video
                         controls
                         preload="metadata"
@@ -82,8 +114,8 @@ export default function DownloadShow({ download }: DownloadShowProps) {
                     </video>
                 ) : (
                     <div className="flex aspect-video w-full max-w-3xl flex-col items-center justify-center gap-2 rounded-xl border bg-muted text-sm text-muted-foreground">
-                        <Spinner className="size-6" />
-                        En attente de données avant de pouvoir lire la vidéo…
+                        {download.transcode_status !== 'failed' && <Spinner className="size-6" />}
+                        {waitingReason}
                     </div>
                 )}
 
@@ -110,6 +142,40 @@ export default function DownloadShow({ download }: DownloadShowProps) {
                         <p className="text-sm text-muted-foreground">{download.message}</p>
                     )}
                 </div>
+
+                {(download.source || download.format) && (
+                    <div className="max-w-md space-y-2 rounded-xl border bg-card p-4 text-sm">
+                        {download.source && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Source</span>
+                                <span>{SOURCE_LABELS[download.source] ?? download.source}</span>
+                            </div>
+                        )}
+
+                        {download.format && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Format d'origine</span>
+                                <span>{download.format}</span>
+                            </div>
+                        )}
+
+                        {download.total_bytes !== null && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Taille</span>
+                                <span>{formatBytes(download.total_bytes)}</span>
+                            </div>
+                        )}
+
+                        {download.transcode_status && (
+                            <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Optimisation</span>
+                                <span className="text-right">
+                                    {TRANSCODE_STATUS_LABELS[download.transcode_status] ?? download.transcode_status}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </>
     );
