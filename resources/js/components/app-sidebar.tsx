@@ -7,6 +7,7 @@ import { NavUser } from '@/components/nav-user';
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import { index } from '@/routes/users/index'
+import { index as libraryIndex } from '@/routes/library'
 
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 
@@ -25,8 +26,9 @@ import type { NavItem } from '@/types';
 const mainNavItems: NavItem[] = [
     {
         title: 'Video',
-        href: "/",
+        href: libraryIndex(),
         icon: Film,
+        prefetch: false,
     },
     {
         title: 'Users',

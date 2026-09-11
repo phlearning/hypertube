@@ -50,4 +50,8 @@ return [
         'secret' => env('TORRENT_WORKER_SECRET'),
     ],
 
+    'omdb' => [
+        'key' => env('OMDB_API_KEY'),
+    ],
+
 ];
