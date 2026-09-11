@@ -51,10 +51,20 @@ class DownloadScheduler
         // stay stable across fallbacks — updating it to the new candidate's
         // hash would let a second request for the same movie stop finding
         // this still-active job and start a redundant duplicate download.
+        //
+        // file_path/downloaded_bytes/total_bytes/is_complete DO get cleared:
+        // they describe the failed candidate's file, and the streaming
+        // endpoint trusts file_path as "safe to read right now" — leaving it
+        // set would let a request in the window between this fallback and
+        // the next candidate's first progress report stream the wrong file.
         $job->update([
             'torrent_url' => $next['torrent_url'],
             'remaining_candidates' => $remaining,
             'message' => $message,
+            'file_path' => null,
+            'downloaded_bytes' => 0,
+            'total_bytes' => null,
+            'is_complete' => false,
         ]);
 
         $this->start($job);

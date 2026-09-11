@@ -18,6 +18,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/library', [LibraryController::class, 'index'])->name('library.index');
     Route::post('/library/downloads', [LibraryDownloadController::class, 'store'])->name('library.downloads.store');
     Route::get('/library/downloads/{torrentJob}', [LibraryDownloadController::class, 'show'])->name('library.downloads.show');
+    Route::get('/library/downloads/{torrentJob}/stream', [LibraryDownloadController::class, 'stream'])->name('library.downloads.stream');
     Route::patch('/updateavatar', [ProfilePictureController::class, 'update'])->name('update.avatar');
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
