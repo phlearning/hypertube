@@ -10,6 +10,22 @@ class RangeFileStreamer
     private const CHUNK_SIZE = 1024 * 1024;
 
     /**
+     * Firefox (unlike Chromium, which sniffs the bytes) refuses to even
+     * attempt playback of a <video> source served as application/octet-stream
+     * — it needs a real video/* Content-Type to try at all.
+     *
+     * @var array<string, string>
+     */
+    private const CONTENT_TYPES = [
+        'mp4' => 'video/mp4',
+        'mkv' => 'video/x-matroska',
+        'avi' => 'video/x-msvideo',
+        'webm' => 'video/webm',
+        'mov' => 'video/quicktime',
+        'ogv' => 'video/ogg',
+    ];
+
+    /**
      * Serve a slice of a file over HTTP, honouring the Range protocol while
      * never reading past $availableBytes — the caller's guarantee of how
      * much of the file is safe to read (e.g. a torrent's downloaded_bytes).
@@ -29,9 +45,10 @@ class RangeFileStreamer
             $isPartial ? 206 : 200,
         );
 
-        $response->headers->set('Content-Type', 'application/octet-stream');
+        $response->headers->set('Content-Type', $this->resolveContentType($path));
         $response->headers->set('Accept-Ranges', 'bytes');
         $response->headers->set('Content-Length', (string) $length);
+        $response->headers->set('Cache-Control', $this->resolveCacheControl($availableBytes, $totalBytes));
 
         if ($isPartial) {
             $response->headers->set('Content-Range', sprintf(
@@ -100,11 +117,43 @@ class RangeFileStreamer
         return [0, 0, false, false];
     }
 
+    private function resolveContentType(string $path): string
+    {
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        return self::CONTENT_TYPES[$extension] ?? 'application/octet-stream';
+    }
+
+    /**
+     * A file still downloading serves different bytes for the same byte
+     * range over time, so caching it would risk the browser reusing a
+     * stale/incomplete response — no-store. Once the whole file is safely
+     * available, those bytes never change again, so letting the browser
+     * cache them is not just safe but valuable: browsers (Chromium
+     * especially) probe a large non-"faststart" video with many small,
+     * overlapping Range requests while hunting for its metadata box, and a
+     * cache lets repeated probes over the same range reuse what's already
+     * been fetched instead of re-hitting the server every time.
+     */
+    private function resolveCacheControl(int $availableBytes, ?int $totalBytes): string
+    {
+        $isFullyAvailable = $totalBytes !== null && $availableBytes >= $totalBytes;
+
+        return $isFullyAvailable
+            ? 'private, max-age=31536000, immutable'
+            : 'no-store';
+    }
+
     private function notSatisfiableResponse(?int $totalBytes): Response
     {
+        // A range that isn't satisfiable yet can become satisfiable moments
+        // later as more of the file downloads — never let a browser cache
+        // this "not there yet" answer, or it may keep treating a since-
+        // arrived range as permanently missing.
         return new Response('', 416, [
             'Accept-Ranges' => 'bytes',
             'Content-Range' => 'bytes */'.($totalBytes !== null ? (string) $totalBytes : '*'),
+            'Cache-Control' => 'no-store',
         ]);
     }
 

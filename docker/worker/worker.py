@@ -18,6 +18,7 @@ PRIORITY_WINDOW_PIECES = 16
 REPORT_THRESHOLD_BYTES = 256 * 1024
 POLL_INTERVAL_SECONDS = 1
 STALL_TIMEOUT_SECONDS = 120
+VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".webm", ".mov", ".ogv"}
 
 
 def connect_redis() -> redis.Redis:
@@ -45,29 +46,58 @@ def handle_ping(job_id: str) -> None:
     report(job_id, status="completed", message="pong from python worker")
 
 
-def contiguous_bytes_done(status, info) -> int:
+def select_target_file(info) -> int:
     """
-    How many bytes, counted from the start of the file with no gap, are
-    confirmed complete. This is deliberately NOT status.total_wanted_done:
+    Pick which file within the torrent is "the movie". A single-file
+    torrent has only one candidate. A multi-file torrent — every
+    archive.org item torrent bundles every format variant (mp4/mkv/avi/...)
+    plus metadata, subtitles and logs in one download — needs one picked
+    out: the largest file with a recognised video extension, falling back
+    to the largest file overall if none matches.
+    """
+    files = info.files()
+    indices = range(files.num_files())
+    video_indices = [i for i in indices if os.path.splitext(files.file_name(i))[1].lower() in VIDEO_EXTENSIONS]
+    pool = video_indices or indices
+
+    return max(pool, key=files.file_size)
+
+
+def contiguous_bytes_done(status, info, file_index: int) -> int:
+    """
+    How many bytes, counted from the start of the target file with no gap,
+    are confirmed complete. This is deliberately NOT status.total_wanted_done:
     that's a sum of all completed pieces regardless of order, and
     sequential_download only biases piece *selection* — under a real
     multi-peer swarm a later piece can still finish before an earlier one,
     leaving a hole. The streaming endpoint trusts this value as "safe to
-    read from byte 0"; reporting total_wanted_done would let it serve bytes
-    from beyond a gap as if they were valid downloaded data.
+    read from byte 0 of this file"; reporting total_wanted_done would let
+    it serve bytes from beyond a gap as if they were valid downloaded data.
+
+    A multi-file torrent's pieces are numbered across the whole torrent, not
+    per file, so this starts scanning from the piece that contains the
+    target file's first byte rather than from piece 0.
     """
+    files = info.files()
+    file_size = files.file_size(file_index)
+    file_offset = files.file_offset(file_index)
+    piece_length = info.piece_length()
+    first_piece = file_offset // piece_length
+
+    pieces = status.pieces
     complete_pieces = 0
-    for piece_complete in status.pieces:
+    for piece_complete in pieces[first_piece:]:
         if not piece_complete:
             break
         complete_pieces += 1
 
     if complete_pieces == 0:
         return 0
-    if complete_pieces >= info.num_pieces():
-        return info.total_size()
 
-    return complete_pieces * info.piece_length()
+    contiguous_end = (first_piece + complete_pieces) * piece_length
+    available = contiguous_end - file_offset
+
+    return min(available, file_size)
 
 
 def handle_download(job_id: str, torrent_url: str) -> None:
@@ -75,9 +105,26 @@ def handle_download(job_id: str, torrent_url: str) -> None:
         torrent_response = requests.get(torrent_url, timeout=30)
         torrent_response.raise_for_status()
         info = lt.torrent_info(lt.bdecode(torrent_response.content))
+        target_index = select_target_file(info)
     except Exception as exc:  # noqa: BLE001 - reported back as a failed job, not crashed worker
-        report(job_id, status="failed", message=f"could not fetch torrent: {exc}")
+        report(job_id, status="failed", message=f"could not prepare torrent: {exc}")
         return
+
+    files = info.files()
+    file_size = files.file_size(target_index)
+    file_offset = files.file_offset(target_index)
+    # file_path() is relative to save_path; for a single-file torrent this is
+    # just the file's own name, so this also covers that case unchanged.
+    file_path = os.path.join(SHARED_DIR, files.file_path(target_index))
+
+    # Every other file in the torrent (archive.org bundles every format
+    # variant plus metadata/subtitles/logs alongside the actual movie) is
+    # deselected so libtorrent doesn't spend bandwidth and disk on hundreds
+    # of megabytes nobody asked for. A shared piece straddling the target
+    # file's boundary is still fetched: libtorrent takes a piece's priority
+    # as the max across every file that overlaps it.
+    priorities = [0] * files.num_files()
+    priorities[target_index] = 4
 
     # Port 0 lets the OS assign an ephemeral port per session, since multiple
     # downloads now run concurrently in this same process (each needs its own
@@ -98,24 +145,26 @@ def handle_download(job_id: str, torrent_url: str) -> None:
             "flags": lt.torrent_flags.sequential_download,
         }
     )
+    handle.prioritize_files(priorities)
 
-    # Front-load deadlines on the first pieces so libtorrent fetches the start
-    # of the file with priority, on top of the sequential ordering above.
-    priority_pieces = min(info.num_pieces(), PRIORITY_WINDOW_PIECES)
-    for piece in range(priority_pieces):
-        handle.set_piece_deadline(piece, (piece + 1) * 1000)
+    # Front-load deadlines on the target file's first pieces so libtorrent
+    # fetches its start with priority, on top of the sequential ordering
+    # above. Piece 0 of the torrent is not piece 0 of this file in a
+    # multi-file torrent — the file can start partway into the piece space.
+    first_piece = file_offset // info.piece_length()
+    priority_pieces = min(info.num_pieces() - first_piece, PRIORITY_WINDOW_PIECES)
+    for offset in range(priority_pieces):
+        handle.set_piece_deadline(first_piece + offset, (offset + 1) * 1000)
 
     # Known as soon as the torrent metadata is parsed, well before any bytes
     # land on disk. Reported from the first progress update (not just on
     # completion) so the streaming endpoint has a path to read from while the
     # download is still in progress.
-    file_path = os.path.join(SHARED_DIR, info.name())
-
     report(
         job_id,
         status="downloading",
         downloaded_bytes=0,
-        total_bytes=info.total_size(),
+        total_bytes=file_size,
         is_complete=False,
         file_path=file_path,
     )
@@ -124,7 +173,15 @@ def handle_download(job_id: str, torrent_url: str) -> None:
     last_done = 0
     last_progress_at = time.time()
     status = handle.status()
-    while not status.is_seeding:
+    downloaded = contiguous_bytes_done(status, info, target_index)
+    # Deliberately NOT status.is_seeding: with other files deselected via
+    # prioritize_files(), is_seeding can fail to ever turn true even once the
+    # target file itself is fully downloaded and hash-verified (observed
+    # live against a real archive.org multi-file torrent) — some boundary or
+    # housekeeping state on the deselected files apparently keeps the whole
+    # torrent from reporting as finished. Whether the file we actually want
+    # is done is a direct, reliable question this function already answers.
+    while downloaded < file_size:
         done = status.total_wanted_done
         if done > last_done:
             last_done = done
@@ -133,8 +190,8 @@ def handle_download(job_id: str, torrent_url: str) -> None:
             report(
                 job_id,
                 status="downloading",
-                downloaded_bytes=contiguous_bytes_done(status, info),
-                total_bytes=status.total_wanted,
+                downloaded_bytes=downloaded,
+                total_bytes=file_size,
                 is_complete=False,
             )
             last_reported = done
@@ -143,12 +200,13 @@ def handle_download(job_id: str, torrent_url: str) -> None:
             return
         time.sleep(POLL_INTERVAL_SECONDS)
         status = handle.status()
+        downloaded = contiguous_bytes_done(status, info, target_index)
 
     report(
         job_id,
         status="completed",
-        downloaded_bytes=status.total_wanted,
-        total_bytes=status.total_wanted,
+        downloaded_bytes=file_size,
+        total_bytes=file_size,
         is_complete=True,
         file_path=file_path,
     )

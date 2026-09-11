@@ -19,6 +19,14 @@ function fixtureFile(string $content): string
     return $path;
 }
 
+function fixtureFileWithExtension(string $content, string $extension): string
+{
+    $path = sys_get_temp_dir().'/range_streamer_test_'.uniqid().'.'.$extension;
+    file_put_contents($path, $content);
+
+    return $path;
+}
+
 test('with no Range header, it serves the available bytes as a full 200 response', function () {
     $path = fixtureFile(str_repeat('a', 40).str_repeat('z', 60));
 
@@ -124,6 +132,100 @@ test('a malformed Range header is ignored, falling back to a full 200 response',
 
     expect($response->getStatusCode())->toBe(200)
         ->and($response->headers->get('Content-Length'))->toBe('40');
+
+    unlink($path);
+});
+
+test('an mp4 file is served with a video/mp4 Content-Type, not the generic octet-stream', function () {
+    $path = fixtureFileWithExtension(str_repeat('a', 40), 'mp4');
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 40, totalBytes: 40, rangeHeader: null);
+
+    expect($response->headers->get('Content-Type'))->toBe('video/mp4');
+
+    unlink($path);
+});
+
+test('recognised video extensions each resolve to their own video/* Content-Type', function () {
+    $cases = [
+        'mkv' => 'video/x-matroska',
+        'avi' => 'video/x-msvideo',
+        'webm' => 'video/webm',
+        'mov' => 'video/quicktime',
+        'ogv' => 'video/ogg',
+    ];
+
+    foreach ($cases as $extension => $expectedContentType) {
+        $path = fixtureFileWithExtension('x', $extension);
+
+        $response = (new RangeFileStreamer)->stream($path, availableBytes: 1, totalBytes: 1, rangeHeader: null);
+
+        expect($response->headers->get('Content-Type'))->toBe($expectedContentType);
+
+        unlink($path);
+    }
+});
+
+test('an unrecognised extension falls back to application/octet-stream', function () {
+    $path = fixtureFileWithExtension('x', 'bin');
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 1, totalBytes: 1, rangeHeader: null);
+
+    expect($response->headers->get('Content-Type'))->toBe('application/octet-stream');
+
+    unlink($path);
+});
+
+test('extension matching is case-insensitive', function () {
+    $path = fixtureFileWithExtension(str_repeat('a', 40), 'MP4');
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 40, totalBytes: 40, rangeHeader: null);
+
+    expect($response->headers->get('Content-Type'))->toBe('video/mp4');
+
+    unlink($path);
+});
+
+test('a still-downloading file is served with Cache-Control: no-store, since the same range can differ later', function () {
+    $path = fixtureFile(str_repeat('a', 40).str_repeat('z', 60));
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 40, totalBytes: 100, rangeHeader: null);
+
+    expect($response->headers->hasCacheControlDirective('no-store'))->toBeTrue()
+        ->and($response->headers->hasCacheControlDirective('max-age'))->toBeFalse();
+
+    unlink($path);
+});
+
+test('a fully downloaded file is served as cacheable, since its bytes will never change again', function () {
+    $path = fixtureFile(str_repeat('a', 100));
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 100, totalBytes: 100, rangeHeader: null);
+
+    expect($response->headers->hasCacheControlDirective('no-store'))->toBeFalse()
+        ->and($response->headers->hasCacheControlDirective('immutable'))->toBeTrue()
+        ->and($response->headers->getCacheControlDirective('max-age'))->toBe('31536000');
+
+    unlink($path);
+});
+
+test('an unknown totalBytes is treated as not-yet-fully-downloaded, never cached', function () {
+    $path = fixtureFile(str_repeat('a', 100));
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 100, totalBytes: null, rangeHeader: null);
+
+    expect($response->headers->hasCacheControlDirective('no-store'))->toBeTrue();
+
+    unlink($path);
+});
+
+test('a 416 response is never cached, since the missing range may arrive moments later', function () {
+    $path = fixtureFile(str_repeat('a', 100));
+
+    $response = (new RangeFileStreamer)->stream($path, availableBytes: 40, totalBytes: 100, rangeHeader: 'bytes=50-60');
+
+    expect($response->getStatusCode())->toBe(416)
+        ->and($response->headers->hasCacheControlDirective('no-store'))->toBeTrue();
 
     unlink($path);
 });
