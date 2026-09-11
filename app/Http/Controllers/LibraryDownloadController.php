@@ -5,14 +5,17 @@ namespace App\Http\Controllers;
 use App\Http\Requests\DownloadRequest;
 use App\Models\TorrentJob;
 use App\Services\Torrent\DownloadScheduler;
+use App\Services\Torrent\RangeFileStreamer;
 use App\Services\Torrent\TorrentCandidateSelector;
 use App\Services\Torrent\TorrentHealthChecker;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
-use Inertia\Response;
+use Inertia\Response as InertiaResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class LibraryDownloadController extends Controller
 {
@@ -20,6 +23,7 @@ class LibraryDownloadController extends Controller
         private readonly TorrentHealthChecker $healthChecker,
         private readonly TorrentCandidateSelector $selector,
         private readonly DownloadScheduler $scheduler,
+        private readonly RangeFileStreamer $streamer,
     ) {}
 
     public function store(DownloadRequest $request): RedirectResponse
@@ -97,7 +101,7 @@ class LibraryDownloadController extends Controller
         return to_route('library.downloads.show', $torrentJob);
     }
 
-    public function show(TorrentJob $torrentJob): Response
+    public function show(TorrentJob $torrentJob): InertiaResponse
     {
         abort_unless($torrentJob->type === 'download', 404);
 
@@ -112,5 +116,18 @@ class LibraryDownloadController extends Controller
                 'message' => $torrentJob->message,
             ],
         ]);
+    }
+
+    public function stream(Request $request, TorrentJob $torrentJob): Response
+    {
+        abort_unless($torrentJob->type === 'download', 404);
+        abort_if($torrentJob->file_path === null, 404);
+
+        return $this->streamer->stream(
+            $torrentJob->file_path,
+            $torrentJob->downloaded_bytes,
+            $torrentJob->total_bytes,
+            $request->header('Range'),
+        );
     }
 }

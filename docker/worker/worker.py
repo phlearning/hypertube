@@ -45,6 +45,31 @@ def handle_ping(job_id: str) -> None:
     report(job_id, status="completed", message="pong from python worker")
 
 
+def contiguous_bytes_done(status, info) -> int:
+    """
+    How many bytes, counted from the start of the file with no gap, are
+    confirmed complete. This is deliberately NOT status.total_wanted_done:
+    that's a sum of all completed pieces regardless of order, and
+    sequential_download only biases piece *selection* — under a real
+    multi-peer swarm a later piece can still finish before an earlier one,
+    leaving a hole. The streaming endpoint trusts this value as "safe to
+    read from byte 0"; reporting total_wanted_done would let it serve bytes
+    from beyond a gap as if they were valid downloaded data.
+    """
+    complete_pieces = 0
+    for piece_complete in status.pieces:
+        if not piece_complete:
+            break
+        complete_pieces += 1
+
+    if complete_pieces == 0:
+        return 0
+    if complete_pieces >= info.num_pieces():
+        return info.total_size()
+
+    return complete_pieces * info.piece_length()
+
+
 def handle_download(job_id: str, torrent_url: str) -> None:
     try:
         torrent_response = requests.get(torrent_url, timeout=30)
@@ -80,7 +105,20 @@ def handle_download(job_id: str, torrent_url: str) -> None:
     for piece in range(priority_pieces):
         handle.set_piece_deadline(piece, (piece + 1) * 1000)
 
-    report(job_id, status="downloading", downloaded_bytes=0, total_bytes=info.total_size(), is_complete=False)
+    # Known as soon as the torrent metadata is parsed, well before any bytes
+    # land on disk. Reported from the first progress update (not just on
+    # completion) so the streaming endpoint has a path to read from while the
+    # download is still in progress.
+    file_path = os.path.join(SHARED_DIR, info.name())
+
+    report(
+        job_id,
+        status="downloading",
+        downloaded_bytes=0,
+        total_bytes=info.total_size(),
+        is_complete=False,
+        file_path=file_path,
+    )
 
     last_reported = 0
     last_done = 0
@@ -92,7 +130,13 @@ def handle_download(job_id: str, torrent_url: str) -> None:
             last_done = done
             last_progress_at = time.time()
         if done - last_reported >= REPORT_THRESHOLD_BYTES:
-            report(job_id, status="downloading", downloaded_bytes=done, total_bytes=status.total_wanted, is_complete=False)
+            report(
+                job_id,
+                status="downloading",
+                downloaded_bytes=contiguous_bytes_done(status, info),
+                total_bytes=status.total_wanted,
+                is_complete=False,
+            )
             last_reported = done
         if time.time() - last_progress_at > STALL_TIMEOUT_SECONDS:
             report(job_id, status="failed", message="download stalled: no progress and no peers available")
@@ -106,7 +150,7 @@ def handle_download(job_id: str, torrent_url: str) -> None:
         downloaded_bytes=status.total_wanted,
         total_bytes=status.total_wanted,
         is_complete=True,
-        file_path=os.path.join(SHARED_DIR, info.name()),
+        file_path=file_path,
     )
 
 

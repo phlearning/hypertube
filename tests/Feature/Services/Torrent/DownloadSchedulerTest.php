@@ -49,6 +49,28 @@ test('handleFailedAttempt advances to the next candidate when one remains', func
     Queue::assertPushed(StartTorrentDownload::class);
 });
 
+test('handleFailedAttempt clears file_path/downloaded_bytes/total_bytes/is_complete, since they described the failed candidate\'s file', function () {
+    Queue::fake();
+    $job = makeTorrentJob([
+        'status' => 'downloading',
+        'file_path' => '/shared/candidate-a.mkv',
+        'downloaded_bytes' => 40 * 1024 * 1024,
+        'total_bytes' => 100 * 1024 * 1024,
+        'is_complete' => false,
+        'remaining_candidates' => [
+            ['source' => 'b', 'source_id' => '2', 'torrent_url' => 'http://source-b.test/movie.torrent', 'info_hash' => 'bbbb'],
+        ],
+    ]);
+
+    (new DownloadScheduler)->handleFailedAttempt($job, '0 seeders');
+
+    expect($job->fresh())
+        ->file_path->toBeNull()
+        ->downloaded_bytes->toBe(0)
+        ->total_bytes->toBeNull()
+        ->is_complete->toBeFalse();
+});
+
 test('handleFailedAttempt keeps info_hash unchanged so dedup keeps matching this job across fallbacks', function () {
     Queue::fake();
     $job = makeTorrentJob([

@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/var/www/html
+      - torrent_downloads:/shared
     depends_on:
       mysql:
         condition: service_healthy
@@ -67,6 +68,8 @@ services:
       REDIS_HOST: redis
       LARAVEL_INTERNAL_URL: http://app:8000/internal/torrent-worker/callback
       TORRENT_WORKER_SECRET: ${TORRENT_WORKER_SECRET:-changeme-in-production}
+    volumes:
+      - torrent_downloads:/shared
     depends_on:
       redis:
         condition: service_healthy
@@ -87,6 +90,7 @@ services:
 
 volumes:
   mysql_data:
+  torrent_downloads:
 
 networks:
   hypertube:
