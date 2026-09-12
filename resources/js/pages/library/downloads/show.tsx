@@ -6,6 +6,20 @@ import echo from '@/echo';
 import { index } from '@/routes/library';
 import { show, stream } from '@/routes/library/downloads';
 
+type MediaInfo = {
+    width: number | null;
+    height: number | null;
+    duration_seconds: number | null;
+    video_codec: string | null;
+    audio_codec: string | null;
+};
+
+type AttemptedCandidate = {
+    source: string | null;
+    torrent_url: string;
+    message: string | null;
+};
+
 type Download = {
     id: number;
     title: string | null;
@@ -15,9 +29,13 @@ type Download = {
     is_complete: boolean;
     message: string | null;
     source: string | null;
+    seeders: number | null;
+    peers: number | null;
     format: string | null;
     transcode_status: string | null;
     can_play: boolean;
+    attempted_candidates: AttemptedCandidate[];
+    media_info: MediaInfo | null;
 };
 
 type DownloadShowProps = {
@@ -52,6 +70,17 @@ function formatBytes(bytes: number): string {
     }
 
     return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+function formatDuration(seconds: number): string {
+    const totalSeconds = Math.round(seconds);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const remainingSeconds = totalSeconds % 60;
+
+    return hours > 0
+        ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+        : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
 export default function DownloadShow({ download: initialDownload }: DownloadShowProps) {
@@ -182,6 +211,15 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                             </div>
                         )}
 
+                        {(download.seeders !== null || download.peers !== null) && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Seeders / Peers</span>
+                                <span>
+                                    {download.seeders ?? '—'} / {download.peers ?? '—'}
+                                </span>
+                            </div>
+                        )}
+
                         {download.transcode_status && (
                             <div className="flex items-center justify-between gap-4">
                                 <span className="text-muted-foreground">Optimisation</span>
@@ -190,6 +228,60 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                                 </span>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {download.media_info && (
+                    <div className="max-w-md space-y-2 rounded-xl border bg-card p-4 text-sm">
+                        <h2 className="font-medium">Détails techniques</h2>
+
+                        {download.media_info.width !== null && download.media_info.height !== null && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Résolution</span>
+                                <span>
+                                    {download.media_info.width}×{download.media_info.height}
+                                </span>
+                            </div>
+                        )}
+
+                        {download.media_info.duration_seconds !== null && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Durée</span>
+                                <span>{formatDuration(download.media_info.duration_seconds)}</span>
+                            </div>
+                        )}
+
+                        {download.media_info.video_codec && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Codec vidéo</span>
+                                <span>{download.media_info.video_codec}</span>
+                            </div>
+                        )}
+
+                        {download.media_info.audio_codec && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Codec audio</span>
+                                <span>{download.media_info.audio_codec}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {download.attempted_candidates.length > 0 && (
+                    <div className="max-w-md space-y-2 rounded-xl border bg-card p-4 text-sm">
+                        <h2 className="font-medium">Candidats précédemment essayés</h2>
+
+                        <ul className="space-y-1">
+                            {download.attempted_candidates.map((candidate, index) => (
+                                <li
+                                    key={index}
+                                    className="flex items-center justify-between gap-4 text-muted-foreground"
+                                >
+                                    <span>{SOURCE_LABELS[candidate.source ?? ''] ?? candidate.source ?? '—'}</span>
+                                    <span className="text-right">{candidate.message ?? 'Échec'}</span>
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 )}
             </div>

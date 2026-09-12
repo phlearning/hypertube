@@ -36,9 +36,13 @@ class DownloadScheduler
     public function handleFailedAttempt(TorrentJob $job, ?string $message): bool
     {
         $remaining = $job->remaining_candidates ?? [];
+        $attempted = [
+            ...($job->attempted_candidates ?? []),
+            ['source' => $job->source, 'torrent_url' => $job->torrent_url, 'message' => $message],
+        ];
 
         if ($remaining === []) {
-            $job->update(['status' => 'failed', 'message' => $message]);
+            $job->update(['status' => 'failed', 'message' => $message, 'attempted_candidates' => $attempted]);
             $this->promoteNext();
 
             return false;
@@ -61,6 +65,7 @@ class DownloadScheduler
             'torrent_url' => $next['torrent_url'],
             'source' => $next['source'],
             'remaining_candidates' => $remaining,
+            'attempted_candidates' => $attempted,
             'message' => $message,
             'file_path' => null,
             'downloaded_bytes' => 0,

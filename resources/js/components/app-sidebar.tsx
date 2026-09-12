@@ -1,16 +1,9 @@
-import { Link, router } from '@inertiajs/react';
-import { LogOut, BookOpen, Settings, LayoutGrid, User, Film } from 'lucide-react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { LogOut, BookOpen, Settings, LayoutGrid, User, Film, ShieldCheck } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-import { logout } from '@/routes';
-import { edit } from '@/routes/profile';
-import { index } from '@/routes/users/index'
-import { index as libraryIndex } from '@/routes/library'
-
-import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
-
 import {
     Sidebar,
     SidebarContent,
@@ -20,8 +13,16 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
+import { logout } from '@/routes';
 import { dashboard } from '@/routes';
-import type { NavItem } from '@/types';
+import { index as adminTorrentJobsIndex } from '@/routes/admin/torrent-jobs'
+import { index as libraryIndex } from '@/routes/library'
+import { edit } from '@/routes/profile';
+import { index } from '@/routes/users/index'
+
+
+import type { Auth, NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
     {
@@ -53,14 +54,16 @@ const footerNavItems: NavItem[] = [
 
 export function AppSidebar() {
     const cleanup = useMobileNavigation();
+    const { auth } = usePage<{ auth: Auth }>().props;
 
     const handleLogout = () => {
         cleanup();
         router.flushAll();
     };
 
-
-
+    const navItems: NavItem[] = auth.user.role === 'admin'
+        ? [...mainNavItems, { title: 'Administration', href: adminTorrentJobsIndex(), icon: ShieldCheck }]
+        : mainNavItems;
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -78,7 +81,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={navItems} />
             </SidebarContent>
 
             <SidebarFooter>

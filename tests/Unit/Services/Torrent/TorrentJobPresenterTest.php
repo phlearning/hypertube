@@ -21,8 +21,12 @@ test('present() exposes the fields the download page needs', function () {
         'is_complete' => false,
         'message' => 'En cours',
         'source' => 'archive_org',
+        'seeders' => 12,
+        'peers' => 30,
         'file_path' => '/shared/Movie/Movie.mkv',
         'transcode_status' => 'processing',
+        'attempted_candidates' => [['source' => 'a', 'torrent_url' => 'http://a.test', 'message' => 'timed out']],
+        'media_info' => ['width' => 1920, 'height' => 1080, 'duration_seconds' => 120.5, 'video_codec' => 'h264', 'audio_codec' => 'aac'],
     ]);
     $torrentJob->id = 7;
 
@@ -35,10 +39,20 @@ test('present() exposes the fields the download page needs', function () {
         'is_complete' => false,
         'message' => 'En cours',
         'source' => 'archive_org',
+        'seeders' => 12,
+        'peers' => 30,
         'format' => 'MKV',
         'transcode_status' => 'processing',
         'can_play' => false,
+        'attempted_candidates' => [['source' => 'a', 'torrent_url' => 'http://a.test', 'message' => 'timed out']],
+        'media_info' => ['width' => 1920, 'height' => 1080, 'duration_seconds' => 120.5, 'video_codec' => 'h264', 'audio_codec' => 'aac'],
     ]);
+});
+
+test('attempted_candidates defaults to an empty array when none exist', function () {
+    $torrentJob = new TorrentJob(['file_path' => null]);
+
+    expect(makePresenter()->present($torrentJob)['attempted_candidates'])->toBe([]);
 });
 
 test('format() returns null when there is no file path yet', function () {

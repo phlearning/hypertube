@@ -12,7 +12,7 @@ class TorrentJobPresenter
      * The shape both the Inertia download page and the real-time progress
      * broadcast need — kept in one place so the two can never drift apart.
      *
-     * @return array{id: ?int, title: ?string, status: string, downloaded_bytes: int, total_bytes: ?int, is_complete: bool, message: ?string, source: ?string, format: ?string, transcode_status: ?string, can_play: bool}
+     * @return array{id: ?int, title: ?string, status: string, downloaded_bytes: int, total_bytes: ?int, is_complete: bool, message: ?string, source: ?string, seeders: ?int, peers: ?int, format: ?string, transcode_status: ?string, can_play: bool, attempted_candidates: array<int, array<string, mixed>>, media_info: ?array<string, mixed>}
      */
     public function present(TorrentJob $torrentJob): array
     {
@@ -25,9 +25,13 @@ class TorrentJobPresenter
             'is_complete' => $torrentJob->is_complete,
             'message' => $torrentJob->message,
             'source' => $torrentJob->source,
+            'seeders' => $torrentJob->seeders,
+            'peers' => $torrentJob->peers,
             'format' => $this->formatOf($torrentJob->file_path),
             'transcode_status' => $torrentJob->transcode_status,
             'can_play' => $this->canPlay($torrentJob),
+            'attempted_candidates' => $torrentJob->attempted_candidates ?? [],
+            'media_info' => $torrentJob->media_info,
         ];
     }
 

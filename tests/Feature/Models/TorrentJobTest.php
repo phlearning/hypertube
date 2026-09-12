@@ -70,3 +70,45 @@ test('a broadcast failure is swallowed and never aborts the caller', function ()
 
     expect($torrentJob->fresh()->downloaded_bytes)->toBe(10);
 });
+
+test('rapid byte-progress updates within the throttle window broadcast only once', function () {
+    Event::fake([TorrentJobProgressUpdated::class]);
+    $torrentJob = makeTorrentJob(['downloaded_bytes' => 0]);
+
+    $torrentJob->update(['downloaded_bytes' => 10]);
+    $torrentJob->update(['downloaded_bytes' => 20]);
+    $torrentJob->update(['downloaded_bytes' => 30]);
+
+    Event::assertDispatchedTimes(TorrentJobProgressUpdated::class, 1);
+});
+
+test('a byte-progress update after the throttle window elapses broadcasts again', function () {
+    Event::fake([TorrentJobProgressUpdated::class]);
+    $torrentJob = makeTorrentJob(['downloaded_bytes' => 0]);
+
+    $torrentJob->update(['downloaded_bytes' => 10]);
+    $this->travel(2)->seconds();
+    $torrentJob->update(['downloaded_bytes' => 20]);
+
+    Event::assertDispatchedTimes(TorrentJobProgressUpdated::class, 2);
+});
+
+test('a status change broadcasts immediately even right after a throttled byte update', function () {
+    Event::fake([TorrentJobProgressUpdated::class]);
+    $torrentJob = makeTorrentJob(['status' => 'downloading', 'downloaded_bytes' => 0]);
+
+    $torrentJob->update(['downloaded_bytes' => 10]);
+    $torrentJob->update(['status' => 'completed']);
+
+    Event::assertDispatchedTimes(TorrentJobProgressUpdated::class, 2);
+});
+
+test('total_bytes changing alongside downloaded_bytes is still subject to the throttle', function () {
+    Event::fake([TorrentJobProgressUpdated::class]);
+    $torrentJob = makeTorrentJob(['downloaded_bytes' => 0, 'total_bytes' => null]);
+
+    $torrentJob->update(['downloaded_bytes' => 10, 'total_bytes' => 1000]);
+    $torrentJob->update(['downloaded_bytes' => 20]);
+
+    Event::assertDispatchedTimes(TorrentJobProgressUpdated::class, 1);
+});

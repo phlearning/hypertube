@@ -65,6 +65,8 @@ test('an authenticated user can start a download and the healthiest candidate is
         ->status->toBe('pending')
         ->torrent_url->toBe('http://source-b.test/movie.torrent')
         ->source->toBe('source_b')
+        ->seeders->toBe(9)
+        ->peers->toBe(9)
         ->info_hash->not->toBeEmpty();
 
     Queue::assertPushed(StartTorrentDownload::class);
@@ -158,8 +160,12 @@ test('an authenticated user can see a download status page', function () {
         'source' => 'archive_org',
         'downloaded_bytes' => 42,
         'total_bytes' => 100,
+        'seeders' => 5,
+        'peers' => 12,
         'file_path' => '/shared/Movie/Movie.mkv',
         'transcode_status' => 'processing',
+        'attempted_candidates' => [['source' => 'public_domain_torrents', 'torrent_url' => 'http://x.test', 'message' => 'no peers']],
+        'media_info' => null,
     ]);
 
     $this
@@ -173,8 +179,14 @@ test('an authenticated user can see a download status page', function () {
                 ->where('download.downloaded_bytes', 42)
                 ->where('download.total_bytes', 100)
                 ->where('download.source', 'archive_org')
+                ->where('download.seeders', 5)
+                ->where('download.peers', 12)
                 ->where('download.format', 'MKV')
                 ->where('download.transcode_status', 'processing')
+                ->where('download.attempted_candidates', [
+                    ['source' => 'public_domain_torrents', 'torrent_url' => 'http://x.test', 'message' => 'no peers'],
+                ])
+                ->where('download.media_info', null)
         );
 });
 

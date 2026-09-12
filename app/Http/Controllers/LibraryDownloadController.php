@@ -82,6 +82,8 @@ class LibraryDownloadController extends Controller
                     'status' => 'queued',
                     'torrent_url' => $first['torrent_url'],
                     'source' => $first['source'],
+                    'seeders' => $first['seeders'],
+                    'peers' => $first['peers'],
                     'info_hash' => $first['info_hash'],
                     'remaining_candidates' => $chain,
                 ]);

@@ -22,7 +22,7 @@ class TorrentJobProgressUpdated implements ShouldBroadcastNow
     }
 
     /**
-     * @return array{id: ?int, title: ?string, status: string, downloaded_bytes: int, total_bytes: ?int, is_complete: bool, message: ?string, source: ?string, format: ?string, transcode_status: ?string, can_play: bool}
+     * @return array{id: ?int, title: ?string, status: string, downloaded_bytes: int, total_bytes: ?int, is_complete: bool, message: ?string, source: ?string, seeders: ?int, peers: ?int, format: ?string, transcode_status: ?string, can_play: bool, attempted_candidates: array<int, array<string, mixed>>, media_info: ?array<string, mixed>}
      */
     public function broadcastWith(): array
     {
