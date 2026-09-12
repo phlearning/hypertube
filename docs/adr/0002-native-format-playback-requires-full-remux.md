@@ -1,0 +1,5 @@
+# Native-format videos require full download + remux before being marked playable
+
+`canPlay()` was marking mp4 ("remux"-planned) files playable as soon as any bytes existed, without waiting for the download to finish — browsers then failed on the `moov` atom (often located near the end of a non-faststart mp4), which surfaced to users as a "corrupted" video even though the download itself was healthy. The alternative was to keep progressive playback working during processing by switching to a fragmented/streamable output (HLS or fragmented mp4) that a growing file can safely be read from.
+
+mp4 ("remux") is now gated the same as a full transcode: playable only once the download is complete and the remux has run. webm keeps its current progressive-playable behavior. The remux step itself takes seconds, so the added wait is small, and this fixes a real correctness bug immediately — building progressive playback during processing (HLS/fragmented mp4 + a generalized available-bytes tracker for the transcode pipeline) is a substantial separate project, deferred rather than bundled into this fix.

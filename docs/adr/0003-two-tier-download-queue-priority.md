@@ -1,0 +1,5 @@
+# Prioritize the download queue by recent re-requests plus FIFO fallback, not live viewer presence
+
+`DownloadScheduler` promotes queued jobs in pure FIFO order (oldest job first) regardless of viewer interest, so a user who starts watching something else can end up stuck behind an old, possibly-abandoned queued job. We considered wiring Reverb presence channels into the scheduler so promotion could reflect who currently has a tracking page open.
+
+Instead, we track `last_requested_at` on each job (touched whenever a duplicate download request matches an existing queued job) and promote in two tiers: jobs re-requested within the last 5 minutes (oldest-first among themselves), then everything else (oldest-first). This fixes the reported "stuck behind the last thing queued" problem with a single extra `ORDER BY` clause, and the FIFO fallback tier guarantees no job waits forever. A live-presence system would be more precise but is meaningfully more infrastructure than this problem needs at our scale.

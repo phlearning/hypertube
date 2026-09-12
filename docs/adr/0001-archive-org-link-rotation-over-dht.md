@@ -1,0 +1,5 @@
+# Handle archive.org's dead-torrent link rotation directly, not full BitTorrent DHT/tracker discovery
+
+archive.org rotates/redirects its `.torrent` link when a torrent's original tracker shows zero seeders (see https://help.archive.org/help/archive-bittorrents/), but the worker currently fetches a candidate's `.torrent` file once via a static HTTP GET and never re-resolves it. We considered building full DHT-based peer discovery so any dead tracker link would self-heal without provider-specific handling.
+
+We detect this specific failure mode for archive.org candidates and re-fetch the source's link before falling back to a different candidate/source, rather than implementing DHT/tracker-discovery from scratch. libtorrent already handles the core wire protocol and peer negotiation once given a valid `.torrent`; the actual gap is link staleness for one well-documented provider, not missing P2P capability — full DHT support would be a large, mostly redundant investment for the problem we actually have.
