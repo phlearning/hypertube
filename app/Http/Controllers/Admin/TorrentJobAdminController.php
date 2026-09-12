@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\TorrentJobClearScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ClearTorrentJobsRequest;
 use App\Models\TorrentJob;
@@ -14,6 +15,9 @@ class TorrentJobAdminController extends Controller
 {
     public function __construct(private readonly TorrentJobCleaner $cleaner) {}
 
+    /**
+     * Show the torrent job counts and clear-up controls.
+     */
     public function index(): InertiaResponse
     {
         return Inertia::render('admin/torrent-jobs', [
@@ -25,10 +29,13 @@ class TorrentJobAdminController extends Controller
         ]);
     }
 
+    /**
+     * Delete torrent jobs matching the requested scope.
+     */
     public function clear(ClearTorrentJobsRequest $request): RedirectResponse
     {
         $deleted = $this->cleaner->clear(
-            $request->validated('scope'),
+            TorrentJobClearScope::from($request->validated('scope')),
             $request->boolean('delete_files'),
         );
 

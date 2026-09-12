@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Enums\TorrentJobClearScope;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ClearTorrentJobsRequest extends FormRequest
 {
@@ -13,7 +15,7 @@ class ClearTorrentJobsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'scope' => ['required', 'string', 'in:all,stuck'],
+            'scope' => ['required', Rule::enum(TorrentJobClearScope::class)],
             'delete_files' => ['required', 'boolean'],
         ];
     }

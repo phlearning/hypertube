@@ -2,6 +2,7 @@
 
 namespace App\Services\Torrent;
 
+use App\Enums\TorrentJobClearScope;
 use App\Models\TorrentJob;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
@@ -20,12 +21,11 @@ class TorrentJobCleaner
      * downloaded/transcoded files from disk. Returns the number of rows
      * deleted.
      */
-    public function clear(string $scope, bool $deleteFiles): int
+    public function clear(TorrentJobClearScope $scope, bool $deleteFiles): int
     {
         $query = match ($scope) {
-            'all' => TorrentJob::query(),
-            'stuck' => $this->stuckQuery(),
-            default => throw new \InvalidArgumentException("Unknown clear scope: {$scope}"),
+            TorrentJobClearScope::All => TorrentJob::query(),
+            TorrentJobClearScope::Stuck => $this->stuckQuery(),
         };
 
         // Snapshot the matching IDs once and delete by ID from here on. The
@@ -51,9 +51,9 @@ class TorrentJobCleaner
     private function stuckQuery(): Builder
     {
         return TorrentJob::query()->where(
-            fn ($query) => $query->where('status', 'failed')
+            fn (Builder $query) => $query->where('status', 'failed')
                 ->orWhere(
-                    fn ($query) => $query->whereIn('status', TorrentJob::ACTIVE_STATUSES)
+                    fn (Builder $query) => $query->whereIn('status', TorrentJob::ACTIVE_STATUSES)
                         ->where('updated_at', '<', now()->subMinutes(self::STALE_AFTER_MINUTES))
                 )
         );
