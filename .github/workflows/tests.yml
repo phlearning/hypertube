@@ -32,7 +32,18 @@ jobs:
           node-version: '22'
 
       - name: Setup Application
-        run: composer setup
+        run: |
+          touch database/database.sqlite
+          composer setup
+        env:
+          # This job has no database service, and .env.example's DB_HOST
+          # (mysql) only resolves inside docker-compose's network — so
+          # `composer setup`'s migrate step needs a target that exists on a
+          # bare runner. Scoped to this step only: the later `composer
+          # ci:check` -> `php artisan test` run gets its DB config from
+          # phpunit.xml (in-memory sqlite) and must stay unaffected.
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/database.sqlite
 
       - name: Run CI Checks
         run: composer ci:check
