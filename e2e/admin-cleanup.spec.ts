@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { makeTorrentJob, resetTestData } from './support/artisan';
+import { APP_ROOT, makeTorrentJob, resetTestData } from './support/artisan';
 import { ADMIN_AUTH } from './support/auth';
 
 test.use({ storageState: ADMIN_AUTH });
@@ -37,7 +37,7 @@ test('clearing "all" with delete-files also removes the file from disk', async (
     makeTorrentJob({
         title: 'To Purge',
         status: 'completed',
-        file_path: `/var/www/html/storage/app/e2e-tmp/${path.basename(filePath)}`,
+        file_path: path.posix.join(APP_ROOT, 'storage', 'app', 'e2e-tmp', path.basename(filePath)),
     });
 
     await page.goto('/admin/torrent-jobs');

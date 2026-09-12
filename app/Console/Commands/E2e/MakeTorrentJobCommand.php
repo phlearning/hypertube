@@ -30,6 +30,9 @@ class MakeTorrentJobCommand extends Command
         /** @var array<string, mixed> $overrides */
         $overrides = json_decode((string) $this->argument('attributes'), associative: true, flags: JSON_THROW_ON_ERROR);
 
+        // Same sane defaults as tests/Pest.php's makeTorrentJob() helper —
+        // this command exists so the same fixture shape is reachable from a
+        // separate Node process, not because it needs different defaults.
         $torrentJob = TorrentJob::create(array_merge([
             'job_id' => (string) Str::uuid(),
             'type' => 'download',
@@ -37,6 +40,7 @@ class MakeTorrentJobCommand extends Command
             'status' => 'queued',
             'torrent_url' => 'http://e2e.test/movie.torrent',
             'info_hash' => Str::random(40),
+            'remaining_candidates' => [],
         ], $overrides));
 
         $this->line($torrentJob->fresh()->toJson());

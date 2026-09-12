@@ -38,4 +38,16 @@ test('a burst of byte-progress updates only reaches the UI at the throttled rate
     updateTorrentJob(torrentJob.job_id, { downloaded_bytes: 700 });
 
     await expect(page.getByText('70%')).toBeVisible({ timeout: 5_000 });
+
+    // A second burst, in a fresh window, shows the throttle holds as a
+    // recurring rate rather than a one-time gate that only applied once.
+    await page.waitForTimeout(1_100);
+    burstUpdateTorrentJob(torrentJob.job_id, [
+        { downloaded_bytes: 800 },
+        { downloaded_bytes: 900 },
+        { downloaded_bytes: 950 },
+    ]);
+
+    await expect(page.getByText('80%')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('95%')).not.toBeVisible();
 });

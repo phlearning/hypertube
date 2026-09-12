@@ -98,6 +98,9 @@ jobs:
       E2E_ARTISAN_CMD: php artisan
       E2E_REVERB_STOP_CMD: kill $(cat reverb.pid)
       E2E_REVERB_START_CMD: bash .github/scripts/start-reverb.sh
+      # artisan runs directly against the checkout here, not inside a
+      # container mounted at /var/www/html — see e2e/support/artisan.ts.
+      E2E_APP_ROOT: ${{ github.workspace }}
 
     steps:
       - name: Checkout code

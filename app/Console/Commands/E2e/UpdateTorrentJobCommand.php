@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands\E2e;
 
-use App\Models\TorrentJob;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -17,6 +16,8 @@ use Illuminate\Console\Command;
 #[Description('Update a TorrentJob by job_id for the Playwright e2e suite and print it as JSON.')]
 class UpdateTorrentJobCommand extends Command
 {
+    use FindsTorrentJobOrFails;
+
     public function handle(): int
     {
         if (app()->environment('production')) {
@@ -25,11 +26,9 @@ class UpdateTorrentJobCommand extends Command
             return self::FAILURE;
         }
 
-        $torrentJob = TorrentJob::query()->where('job_id', $this->argument('job_id'))->first();
+        $torrentJob = $this->findTorrentJobOrFail($this->argument('job_id'));
 
         if ($torrentJob === null) {
-            $this->error("No torrent job found with job_id {$this->argument('job_id')}.");
-
             return self::FAILURE;
         }
 

@@ -7,6 +7,16 @@ import { execFileSync } from 'node:child_process';
  */
 const ARTISAN_CMD = process.env.E2E_ARTISAN_CMD ?? 'docker compose exec -T app php artisan';
 
+/**
+ * Filesystem root the artisan process above sees as its app directory —
+ * `/var/www/html` inside the docker-compose `app` container, but the
+ * checkout directory itself when artisan runs as a bare process (e.g. the
+ * CI `e2e` job, which sets E2E_APP_ROOT to $GITHUB_WORKSPACE). Any test
+ * writing a file for the app to read/delete needs to store the path this
+ * way rather than hardcoding either environment's layout.
+ */
+export const APP_ROOT = process.env.E2E_APP_ROOT ?? '/var/www/html';
+
 function runArtisan(args: string[]): string {
     const [command, ...prefixArgs] = ARTISAN_CMD.split(' ');
 
@@ -66,4 +76,13 @@ export function burstUpdateTorrentJob(jobId: string, updates: Record<string, unk
  */
 export function seedSearchResults(query: string, movies: Record<string, unknown>[]): void {
     runArtisan(['e2e:seed-search-cache', JSON.stringify(movies), `--query=${query}`]);
+}
+
+/**
+ * Reads a config value from the app itself (dot notation) — used to get the
+ * internal worker's shared secret for broadcast-outage.spec.ts's call to the
+ * real completion callback, rather than hardcoding or duplicating it.
+ */
+export function readConfig(key: string): string {
+    return runArtisan(['e2e:print-config', key]).trim();
 }
