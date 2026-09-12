@@ -31,3 +31,9 @@ yarn-error.log
 # supervisord runtime files (should live in /var/log, /var/run inside the container)
 supervisord.log
 supervisord.pid
+
+# Playwright e2e runtime output (storage state holds real session cookies)
+/e2e/.auth
+/test-results
+/playwright-report
+/playwright/.cache

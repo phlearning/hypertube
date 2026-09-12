@@ -36,3 +36,130 @@ jobs:
 
       - name: Run CI Checks
         run: composer ci:check
+
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: hypertube
+          MYSQL_USER: hypertube
+          MYSQL_PASSWORD: secret
+          MYSQL_ROOT_PASSWORD: secret
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      APP_ENV: local
+      APP_URL: http://127.0.0.1:8000
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: hypertube
+      DB_USERNAME: hypertube
+      DB_PASSWORD: secret
+      SESSION_DRIVER: database
+      BROADCAST_CONNECTION: reverb
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: database
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      REVERB_APP_ID: hypertube
+      REVERB_APP_KEY: hypertube-key
+      REVERB_APP_SECRET: hypertube-secret
+      REVERB_HOST: 127.0.0.1
+      REVERB_PORT: 8080
+      REVERB_SCHEME: http
+      VITE_REVERB_APP_KEY: hypertube-key
+      VITE_REVERB_HOST: 127.0.0.1
+      VITE_REVERB_PORT: 8080
+      VITE_REVERB_SCHEME: http
+      # This job runs the app as plain background processes on the runner
+      # rather than via docker-compose (see e2e/support/*.ts), so every
+      # helper that otherwise shells out to `docker compose ...` needs the
+      # non-docker equivalent here.
+      E2E_ARTISAN_CMD: php artisan
+      E2E_REVERB_STOP_CMD: kill $(cat reverb.pid)
+      E2E_REVERB_START_CMD: bash .github/scripts/start-reverb.sh
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.5'
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Configure environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run migrations
+        run: php artisan migrate --force
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Start the app, queue worker, and Reverb
+        run: |
+          bash .github/scripts/start-reverb.sh
+          nohup php artisan queue:work redis --queue=default,transcoding --tries=1 --sleep=1 > queue.log 2>&1 &
+          nohup php artisan serve --host=127.0.0.1 --port=8000 > serve.log 2>&1 &
+          npx wait-on -t 30000 http-get://127.0.0.1:8000/login tcp:127.0.0.1:8080
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      - name: Show app/queue/reverb logs on failure
+        if: failure()
+        run: |
+          echo "--- serve.log ---"; cat serve.log || true
+          echo "--- queue.log ---"; cat queue.log || true
+          echo "--- reverb.log ---"; cat reverb.log || true

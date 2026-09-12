@@ -32,7 +32,7 @@ class MovieSearchService
     public function search(MovieSearchCriteria $criteria): LengthAwarePaginator
     {
         $results = Cache::remember(
-            $this->cacheKey($criteria),
+            self::cacheKeyFor($criteria),
             now()->addMinutes(self::CACHE_TTL_MINUTES),
             function () use ($criteria) {
                 $results = [
@@ -51,7 +51,15 @@ class MovieSearchService
         return $this->paginate($results, $criteria->page, $criteria->perPage);
     }
 
-    private function cacheKey(MovieSearchCriteria $criteria): string
+    /**
+     * Public so the Playwright e2e suite can pre-populate this exact cache
+     * entry with fixture movies (see e2e:seed-search-cache), sidestepping
+     * archive.org/PublicDomainTorrents/OMDb entirely for scenarios that need
+     * deterministic, repeatable search results (e.g. two movies sharing a
+     * title, to exercise result-list rendering under a real search-result
+     * shape rather than hand-built fixtures).
+     */
+    public static function cacheKeyFor(MovieSearchCriteria $criteria): string
     {
         return 'library:search:'.md5((string) json_encode([
             $criteria->query,
