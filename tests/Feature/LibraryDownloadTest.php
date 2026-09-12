@@ -261,13 +261,18 @@ test('can_play reflects whether the format is natively playable or transcoding h
     $cases = [
         // [downloaded_bytes, file_path, transcode_status, expected can_play]
         [0, '/shared/Movie/Movie.mp4', null, false],
-        [10, '/shared/Movie/Movie.mp4', null, true],
+        // A raw, not-yet-remuxed mp4 usually has its moov atom near the end
+        // of the file — exactly what sequential downloading fetches last —
+        // so it isn't playable on downloaded bytes alone, unlike webm below.
+        [10, '/shared/Movie/Movie.mp4', null, false],
         [10, '/shared/Movie/Movie.webm', null, true],
         [10, '/shared/Movie/Movie.mkv', null, false],
         [10, '/shared/Movie/Movie.mkv', 'processing', false],
         [10, '/shared/Movie/Movie.mkv', 'completed', true],
         [10, '/shared/Movie/Movie.mkv', 'failed', false],
         [10, '/shared/Movie/Movie.webm', 'skipped', true],
+        [10, '/shared/Movie/Movie.mp4', 'processing', false],
+        [10, '/shared/Movie/Movie.mp4', 'completed', true],
     ];
 
     foreach ($cases as [$downloadedBytes, $filePath, $transcodeStatus, $expected]) {
