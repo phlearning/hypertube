@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\TorrentJob;
+use App\Services\Torrent\MediaProbe;
 use App\Services\Torrent\VideoTranscoder;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -24,7 +25,7 @@ class TranscodeVideo implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(VideoTranscoder $transcoder): void
+    public function handle(VideoTranscoder $transcoder, MediaProbe $prober): void
     {
         $sourcePath = $this->torrentJob->file_path;
 
@@ -33,7 +34,10 @@ class TranscodeVideo implements ShouldQueue
         }
 
         if ($transcoder->planFor($sourcePath) === 'skip') {
-            $this->torrentJob->update(['transcode_status' => 'skipped']);
+            $this->torrentJob->update([
+                'transcode_status' => 'skipped',
+                'media_info' => $this->probe($prober, $sourcePath),
+            ]);
 
             return;
         }
@@ -54,7 +58,23 @@ class TranscodeVideo implements ShouldQueue
         }
 
         $this->torrentJob->update($succeeded
-            ? ['transcode_status' => 'completed', 'playback_path' => $destinationPath]
+            ? ['transcode_status' => 'completed', 'playback_path' => $destinationPath, 'media_info' => $this->probe($prober, $destinationPath)]
             : ['transcode_status' => 'failed']);
+    }
+
+    /**
+     * Probing is purely informational (provenance details shown on the
+     * download page) — it must never turn an otherwise-successful transcode
+     * into a failure, so any problem here is swallowed.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function probe(MediaProbe $prober, string $path): ?array
+    {
+        try {
+            return $prober->probe($path);
+        } catch (Throwable) {
+            return null;
+        }
     }
 }

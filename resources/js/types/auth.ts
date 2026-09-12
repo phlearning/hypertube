@@ -9,6 +9,7 @@ export type User = {
     created_at: string;
     updated_at: string;
     preferredlanguage: 'english' | 'french' | 'german' | 'spanish';
+    role: 'user' | 'admin';
     [key: string]: unknown;
 };
 

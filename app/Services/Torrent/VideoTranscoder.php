@@ -76,7 +76,7 @@ class VideoTranscoder
         return $result->successful();
     }
 
-    private function extension(string $path): string
+    public function extension(string $path): string
     {
         return strtolower(pathinfo($path, PATHINFO_EXTENSION));
     }

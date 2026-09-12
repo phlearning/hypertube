@@ -1,9 +1,24 @@
 import { Head, router } from '@inertiajs/react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Heading from '@/components/heading';
 import { Spinner } from '@/components/ui/spinner';
+import echo from '@/echo';
 import { index } from '@/routes/library';
 import { show, stream } from '@/routes/library/downloads';
+
+type MediaInfo = {
+    width: number | null;
+    height: number | null;
+    duration_seconds: number | null;
+    video_codec: string | null;
+    audio_codec: string | null;
+};
+
+type AttemptedCandidate = {
+    source: string | null;
+    torrent_url: string;
+    message: string | null;
+};
 
 type Download = {
     id: number;
@@ -14,16 +29,18 @@ type Download = {
     is_complete: boolean;
     message: string | null;
     source: string | null;
+    seeders: number | null;
+    peers: number | null;
     format: string | null;
     transcode_status: string | null;
     can_play: boolean;
+    attempted_candidates: AttemptedCandidate[];
+    media_info: MediaInfo | null;
 };
 
 type DownloadShowProps = {
     download: Download;
 };
-
-const POLL_INTERVAL_MS = 2000;
 
 const STATUS_LABELS: Record<string, string> = {
     queued: "En file d'attente",
@@ -55,11 +72,24 @@ function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
-export default function DownloadShow({ download }: DownloadShowProps) {
-    // A completed download still needs polling if transcoding (dispatched
-    // right as the download settles) hasn't reached its own terminal state
-    // yet — otherwise the page would never notice the video becoming
-    // playable once optimisation finishes.
+function formatDuration(seconds: number): string {
+    const totalSeconds = Math.round(seconds);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const remainingSeconds = totalSeconds % 60;
+
+    return hours > 0
+        ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+        : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+export default function DownloadShow({ download: initialDownload }: DownloadShowProps) {
+    const [download, setDownload] = useState(initialDownload);
+
+    // A completed download still needs live updates if transcoding
+    // (dispatched right as the download settles) hasn't reached its own
+    // terminal state yet — otherwise the page would never notice the video
+    // becoming playable once optimisation finishes.
     const isSettled =
         download.status === 'failed' ||
         (download.status === 'completed' &&
@@ -71,12 +101,27 @@ export default function DownloadShow({ download }: DownloadShowProps) {
             return;
         }
 
-        const interval = setInterval(() => {
-            router.reload({ only: ['download'] });
-        }, POLL_INTERVAL_MS);
+        const channelName = `torrent-job.${download.id}`;
+        echo.private(channelName)
+            .listen('.progress.updated', (payload: Download) => {
+                setDownload(payload);
+            })
+            .subscribed(() => {
+                // Closes the race between this page's server render and the
+                // channel actually becoming authorized: a progress broadcast
+                // sent during that window is missed outright (Reverb doesn't
+                // replay past messages), so a one-off catch-up fetch once
+                // subscribed — not a recurring poll — covers it.
+                router.reload({ only: ['download'] });
+            })
+            .error((status: unknown) => {
+                console.error('Failed to subscribe to torrent job progress channel.', status);
+            });
 
-        return () => clearInterval(interval);
-    }, [isSettled]);
+        return () => {
+            echo.leave(channelName);
+        };
+    }, [download.id, isSettled]);
 
     const percent =
         download.total_bytes && download.total_bytes > 0
@@ -86,11 +131,13 @@ export default function DownloadShow({ download }: DownloadShowProps) {
     const heading = download.title ?? 'Téléchargement';
 
     const waitingReason =
-        download.downloaded_bytes === 0
-            ? 'En attente de données avant de pouvoir lire la vidéo…'
-            : download.transcode_status === 'failed'
-              ? "Échec de l'optimisation vidéo : la lecture n'est pas possible."
-              : 'Conversion de la vidéo pour la lecture…';
+        download.status === 'failed'
+            ? 'Le téléchargement a échoué : la lecture n\'est pas possible.'
+            : download.downloaded_bytes === 0
+              ? 'En attente de données avant de pouvoir lire la vidéo…'
+              : download.transcode_status === 'failed'
+                ? "Échec de l'optimisation vidéo : la lecture n'est pas possible."
+                : 'Conversion de la vidéo pour la lecture…';
 
     return (
         <>
@@ -114,7 +161,9 @@ export default function DownloadShow({ download }: DownloadShowProps) {
                     </video>
                 ) : (
                     <div className="flex aspect-video w-full max-w-3xl flex-col items-center justify-center gap-2 rounded-xl border bg-muted text-sm text-muted-foreground">
-                        {download.transcode_status !== 'failed' && <Spinner className="size-6" />}
+                        {download.status !== 'failed' && download.transcode_status !== 'failed' && (
+                            <Spinner className="size-6" />
+                        )}
                         {waitingReason}
                     </div>
                 )}
@@ -166,6 +215,15 @@ export default function DownloadShow({ download }: DownloadShowProps) {
                             </div>
                         )}
 
+                        {(download.seeders !== null || download.peers !== null) && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Seeders / Peers</span>
+                                <span>
+                                    {download.seeders ?? '—'} / {download.peers ?? '—'}
+                                </span>
+                            </div>
+                        )}
+
                         {download.transcode_status && (
                             <div className="flex items-center justify-between gap-4">
                                 <span className="text-muted-foreground">Optimisation</span>
@@ -174,6 +232,60 @@ export default function DownloadShow({ download }: DownloadShowProps) {
                                 </span>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {download.media_info && (
+                    <div className="max-w-md space-y-2 rounded-xl border bg-card p-4 text-sm">
+                        <h2 className="font-medium">Détails techniques</h2>
+
+                        {download.media_info.width !== null && download.media_info.height !== null && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Résolution</span>
+                                <span>
+                                    {download.media_info.width}×{download.media_info.height}
+                                </span>
+                            </div>
+                        )}
+
+                        {download.media_info.duration_seconds !== null && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Durée</span>
+                                <span>{formatDuration(download.media_info.duration_seconds)}</span>
+                            </div>
+                        )}
+
+                        {download.media_info.video_codec && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Codec vidéo</span>
+                                <span>{download.media_info.video_codec}</span>
+                            </div>
+                        )}
+
+                        {download.media_info.audio_codec && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Codec audio</span>
+                                <span>{download.media_info.audio_codec}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {download.attempted_candidates.length > 0 && (
+                    <div className="max-w-md space-y-2 rounded-xl border bg-card p-4 text-sm">
+                        <h2 className="font-medium">Candidats précédemment essayés</h2>
+
+                        <ul className="space-y-1">
+                            {download.attempted_candidates.map((candidate, index) => (
+                                <li
+                                    key={index}
+                                    className="flex items-center justify-between gap-4 text-muted-foreground"
+                                >
+                                    <span>{SOURCE_LABELS[candidate.source ?? ''] ?? candidate.source ?? '—'}</span>
+                                    <span className="text-right">{candidate.message ?? 'Échec'}</span>
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 )}
             </div>

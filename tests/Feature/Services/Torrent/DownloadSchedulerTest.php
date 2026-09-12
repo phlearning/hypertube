@@ -99,6 +99,61 @@ test('handleFailedAttempt marks the job failed once every candidate is exhausted
     Queue::assertNotPushed(StartTorrentDownload::class);
 });
 
+test('handleFailedAttempt records the failed candidate in attempted_candidates', function () {
+    Queue::fake();
+    $job = makeTorrentJob([
+        'source' => 'a',
+        'torrent_url' => 'http://source-a.test/movie.torrent',
+        'info_hash' => 'aaaa',
+        'remaining_candidates' => [
+            ['source' => 'b', 'source_id' => '2', 'torrent_url' => 'http://source-b.test/movie.torrent', 'info_hash' => 'bbbb'],
+        ],
+    ]);
+
+    (new DownloadScheduler)->handleFailedAttempt($job, '0 seeders');
+
+    expect($job->fresh()->attempted_candidates)->toBe([
+        ['source' => 'a', 'torrent_url' => 'http://source-a.test/movie.torrent', 'message' => '0 seeders'],
+    ]);
+});
+
+test('handleFailedAttempt appends to existing attempted_candidates across multiple fallbacks', function () {
+    Queue::fake();
+    $job = makeTorrentJob([
+        'source' => 'b',
+        'torrent_url' => 'http://source-b.test/movie.torrent',
+        'attempted_candidates' => [
+            ['source' => 'a', 'torrent_url' => 'http://source-a.test/movie.torrent', 'message' => '0 seeders'],
+        ],
+        'remaining_candidates' => [
+            ['source' => 'c', 'source_id' => '3', 'torrent_url' => 'http://source-c.test/movie.torrent', 'info_hash' => 'cccc'],
+        ],
+    ]);
+
+    (new DownloadScheduler)->handleFailedAttempt($job, 'timed out');
+
+    expect($job->fresh()->attempted_candidates)->toBe([
+        ['source' => 'a', 'torrent_url' => 'http://source-a.test/movie.torrent', 'message' => '0 seeders'],
+        ['source' => 'b', 'torrent_url' => 'http://source-b.test/movie.torrent', 'message' => 'timed out'],
+    ]);
+});
+
+test('handleFailedAttempt records the failed candidate even when every candidate is exhausted', function () {
+    Queue::fake();
+    $job = makeTorrentJob([
+        'status' => 'downloading',
+        'source' => 'a',
+        'torrent_url' => 'http://source-a.test/movie.torrent',
+        'remaining_candidates' => [],
+    ]);
+
+    (new DownloadScheduler)->handleFailedAttempt($job, 'no peers');
+
+    expect($job->fresh()->attempted_candidates)->toBe([
+        ['source' => 'a', 'torrent_url' => 'http://source-a.test/movie.torrent', 'message' => 'no peers'],
+    ]);
+});
+
 test('exhausting the last candidate promotes the oldest queued job into the freed slot', function () {
     Queue::fake();
     makeTorrentJob(['status' => 'pending']);
