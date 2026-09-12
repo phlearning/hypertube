@@ -2,13 +2,13 @@
 
 namespace App\Providers;
 
+use App\Socialite\FortytwoProvider;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Socialite\Socialite;
-use App\Socialite\FortytwoProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -29,8 +29,9 @@ class AppServiceProvider extends ServiceProvider
 
         Socialite::extend(
             'fortytwo',
-            function(){return Socialite::buildProvider(
-                FortytwoProvider::class, config('services.fortytwo'));
+            function () {
+                return Socialite::buildProvider(
+                    FortytwoProvider::class, config('services.fortytwo'));
             }
         );
     }

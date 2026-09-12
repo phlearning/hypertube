@@ -50,7 +50,7 @@ export default function TorrentJobsAdmin({ counts }: TorrentJobAdminProps) {
                     setProcessing(false);
                     setConfirmOpen(false);
                 },
-            }
+            },
         );
     };
 
@@ -67,16 +67,28 @@ export default function TorrentJobsAdmin({ counts }: TorrentJobAdminProps) {
 
                 <div className="grid max-w-md grid-cols-3 gap-3 text-center">
                     <div className="rounded-xl border bg-card p-4">
-                        <div className="text-2xl font-semibold">{counts.total}</div>
-                        <div className="text-xs text-muted-foreground">Total</div>
+                        <div className="text-2xl font-semibold">
+                            {counts.total}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            Total
+                        </div>
                     </div>
                     <div className="rounded-xl border bg-card p-4">
-                        <div className="text-2xl font-semibold">{counts.active}</div>
-                        <div className="text-xs text-muted-foreground">En cours</div>
+                        <div className="text-2xl font-semibold">
+                            {counts.active}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            En cours
+                        </div>
                     </div>
                     <div className="rounded-xl border bg-card p-4">
-                        <div className="text-2xl font-semibold">{counts.failed}</div>
-                        <div className="text-xs text-muted-foreground">En échec</div>
+                        <div className="text-2xl font-semibold">
+                            {counts.failed}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            En échec
+                        </div>
                     </div>
                 </div>
 
@@ -88,8 +100,12 @@ export default function TorrentJobsAdmin({ counts }: TorrentJobAdminProps) {
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="stuck">{SCOPE_LABELS.stuck}</SelectItem>
-                                <SelectItem value="all">{SCOPE_LABELS.all}</SelectItem>
+                                <SelectItem value="stuck">
+                                    {SCOPE_LABELS.stuck}
+                                </SelectItem>
+                                <SelectItem value="all">
+                                    {SCOPE_LABELS.all}
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -98,7 +114,9 @@ export default function TorrentJobsAdmin({ counts }: TorrentJobAdminProps) {
                         <Checkbox
                             id="delete_files"
                             checked={deleteFiles}
-                            onCheckedChange={(checked) => setDeleteFiles(checked === true)}
+                            onCheckedChange={(checked) =>
+                                setDeleteFiles(checked === true)
+                            }
                         />
                         <Label htmlFor="delete_files" className="font-normal">
                             Supprimer aussi les fichiers sur disque
@@ -120,16 +138,26 @@ export default function TorrentJobsAdmin({ counts }: TorrentJobAdminProps) {
                     <DialogHeader>
                         <DialogTitle>Confirmer le nettoyage</DialogTitle>
                         <DialogDescription>
-                            Cette action va supprimer définitivement « {SCOPE_LABELS[scope]} »
-                            {deleteFiles ? ', y compris les fichiers sur disque' : ''}. Cette
-                            action est irréversible.
+                            Cette action va supprimer définitivement «{' '}
+                            {SCOPE_LABELS[scope]} »
+                            {deleteFiles
+                                ? ', y compris les fichiers sur disque'
+                                : ''}
+                            . Cette action est irréversible.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+                        <Button
+                            variant="outline"
+                            onClick={() => setConfirmOpen(false)}
+                        >
                             Annuler
                         </Button>
-                        <Button variant="destructive" onClick={submit} disabled={processing}>
+                        <Button
+                            variant="destructive"
+                            onClick={submit}
+                            disabled={processing}
+                        >
                             Confirmer la suppression
                         </Button>
                     </DialogFooter>
