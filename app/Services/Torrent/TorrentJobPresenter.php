@@ -43,6 +43,14 @@ class TorrentJobPresenter
      */
     private function canPlay(TorrentJob $torrentJob): bool
     {
+        // A failed job's file is never trustworthy, no matter how many bytes
+        // landed before it failed: the swarm can die with the last pieces
+        // (often where an mp4's moov atom lives) still missing, leaving a
+        // file that's the right size but won't actually decode.
+        if ($torrentJob->status === 'failed') {
+            return false;
+        }
+
         if ($torrentJob->downloaded_bytes <= 0) {
             return false;
         }

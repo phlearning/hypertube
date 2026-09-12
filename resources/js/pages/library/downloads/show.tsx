@@ -131,11 +131,13 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
     const heading = download.title ?? 'Téléchargement';
 
     const waitingReason =
-        download.downloaded_bytes === 0
-            ? 'En attente de données avant de pouvoir lire la vidéo…'
-            : download.transcode_status === 'failed'
-              ? "Échec de l'optimisation vidéo : la lecture n'est pas possible."
-              : 'Conversion de la vidéo pour la lecture…';
+        download.status === 'failed'
+            ? 'Le téléchargement a échoué : la lecture n\'est pas possible.'
+            : download.downloaded_bytes === 0
+              ? 'En attente de données avant de pouvoir lire la vidéo…'
+              : download.transcode_status === 'failed'
+                ? "Échec de l'optimisation vidéo : la lecture n'est pas possible."
+                : 'Conversion de la vidéo pour la lecture…';
 
     return (
         <>
@@ -159,7 +161,9 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                     </video>
                 ) : (
                     <div className="flex aspect-video w-full max-w-3xl flex-col items-center justify-center gap-2 rounded-xl border bg-muted text-sm text-muted-foreground">
-                        {download.transcode_status !== 'failed' && <Spinner className="size-6" />}
+                        {download.status !== 'failed' && download.transcode_status !== 'failed' && (
+                            <Spinner className="size-6" />
+                        )}
                         {waitingReason}
                     </div>
                 )}

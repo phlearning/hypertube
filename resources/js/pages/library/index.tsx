@@ -271,7 +271,9 @@ export default function LibraryIndex({ movies, filters }: LibraryIndexProps) {
                         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
                             {movies.data.map((movie) => (
                                 <MovieCard
-                                    key={`${movie.title}:${movie.year ?? ''}`}
+                                    key={movie.candidates
+                                        .map((candidate) => `${candidate.source}:${candidate.source_id}`)
+                                        .join(',')}
                                     movie={movie}
                                 />
                             ))}

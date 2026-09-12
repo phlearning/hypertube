@@ -85,3 +85,13 @@ test('can_play truth table mirrors native-format-or-transcoded logic', function 
         expect($presenter->present($torrentJob)['can_play'])->toBe($expected);
     }
 });
+
+test('a failed job is never playable, even if bytes were downloaded before it failed', function () {
+    $torrentJob = new TorrentJob([
+        'status' => 'failed',
+        'downloaded_bytes' => 211163830,
+        'file_path' => '/shared/Movie/Movie.mp4',
+    ]);
+
+    expect(makePresenter()->present($torrentJob)['can_play'])->toBeFalse();
+});
