@@ -60,6 +60,31 @@ test('sort and filter query params are echoed back as active filters', function 
         );
 });
 
+test('a movie already watched is flagged in the search results', function () {
+    fakeLibraryHttp();
+    makeTorrentJob(['title' => 'Night of the Living Dead', 'last_watched_at' => now()]);
+    $user = User::factory()->create();
+
+    $this
+        ->actingAs($user)
+        ->get(route('library.index', ['q' => 'living']))
+        ->assertInertia(
+            fn (AssertableInertia $page) => $page->where('movies.data.0.watched', true)
+        );
+});
+
+test('a movie never watched is not flagged in the search results', function () {
+    fakeLibraryHttp();
+    $user = User::factory()->create();
+
+    $this
+        ->actingAs($user)
+        ->get(route('library.index', ['q' => 'living']))
+        ->assertInertia(
+            fn (AssertableInertia $page) => $page->where('movies.data.0.watched', false)
+        );
+});
+
 test('an invalid sort value is rejected', function () {
     $user = User::factory()->create();
 

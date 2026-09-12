@@ -80,7 +80,7 @@ class MovieSearchService
         $groups = [];
 
         foreach ($movies as $movie) {
-            $titleKey = mb_strtolower(trim((string) $movie['title']));
+            $titleKey = MovieTitle::key((string) $movie['title']);
             $index = $this->findCompatibleGroup($groups, $titleKey, $movie['year']);
 
             /** @var array<string, mixed> $group */

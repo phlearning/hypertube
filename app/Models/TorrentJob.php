@@ -57,6 +57,14 @@ class TorrentJob extends Model
 
     private const THROTTLE_SECONDS = 1;
 
+    /**
+     * How often a still-playing video bumps last_watched_at. Streaming
+     * issues a request per Range chunk (dozens per playback session), so
+     * this is throttled the same way byte-progress broadcasts are — the
+     * purge job only cares about the date, not the second.
+     */
+    private const WATCHED_THROTTLE_SECONDS = 3600;
+
     protected static function booted(): void
     {
         static::updated(function (TorrentJob $torrentJob): void {
@@ -149,6 +157,23 @@ class TorrentJob extends Model
         return ! Cache::add($key, true, self::THROTTLE_SECONDS);
     }
 
+    /**
+     * Record that this job's file was just streamed to a viewer, throttled
+     * so a single playback session's many Range requests only write once.
+     * `last_watched_at` deliberately isn't a broadcast-relevant field (see
+     * BROADCAST_RELEVANT_FIELDS above) — watch history isn't progress.
+     */
+    public function markWatched(): void
+    {
+        $key = "torrent-job-watched-throttle:{$this->job_id}";
+
+        if (! Cache::add($key, true, self::WATCHED_THROTTLE_SECONDS)) {
+            return;
+        }
+
+        $this->update(['last_watched_at' => now()]);
+    }
+
     protected $fillable = [
         'job_id',
         'type',
@@ -169,6 +194,7 @@ class TorrentJob extends Model
         'playback_path',
         'transcode_status',
         'media_info',
+        'last_watched_at',
     ];
 
     protected $casts = [
@@ -180,5 +206,6 @@ class TorrentJob extends Model
         'remaining_candidates' => 'array',
         'attempted_candidates' => 'array',
         'media_info' => 'array',
+        'last_watched_at' => 'datetime',
     ];
 }

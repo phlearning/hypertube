@@ -92,6 +92,21 @@ test('a Range request starting beyond the downloaded portion is rejected with 41
     unlink($torrentJob->file_path);
 });
 
+test('streaming a download records it as watched', function () {
+    $user = User::factory()->create();
+    $torrentJob = makeStreamableTorrentJob(str_repeat('a', 100), downloadedBytes: 40);
+    expect($torrentJob->last_watched_at)->toBeNull();
+
+    $this
+        ->actingAs($user)
+        ->get(route('library.downloads.stream', $torrentJob))
+        ->assertOk();
+
+    expect($torrentJob->fresh()->last_watched_at)->not->toBeNull();
+
+    unlink($torrentJob->file_path);
+});
+
 test('once transcoded, the endpoint serves playback_path in full, not the original file_path', function () {
     $user = User::factory()->create();
     // The original download: only partially "safe" per downloaded_bytes.

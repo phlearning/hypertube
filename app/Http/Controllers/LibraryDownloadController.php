@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\DownloadRequest;
 use App\Models\TorrentJob;
+use App\Services\Search\MovieTitle;
 use App\Services\Torrent\DownloadScheduler;
 use App\Services\Torrent\RangeFileStreamer;
 use App\Services\Torrent\TorrentCandidateSelector;
@@ -33,6 +34,12 @@ class LibraryDownloadController extends Controller
         /** @var array<int, array{source: string, source_id: string, torrent_url: string}> $candidates */
         $candidates = $request->validated('candidates');
         $title = $request->validated('title');
+
+        $cached = $this->findCachedDownload($title);
+
+        if ($cached !== null) {
+            return to_route('library.downloads.show', $cached);
+        }
 
         $enriched = array_map(fn (array $candidate) => [
             ...$candidate,
@@ -106,6 +113,25 @@ class LibraryDownloadController extends Controller
         return to_route('library.downloads.show', $torrentJob);
     }
 
+    /**
+     * A completed download whose file is still on disk can be watched
+     * immediately without re-downloading. Matched by normalized title
+     * rather than info_hash, since a repeat search can rank a different
+     * (but equally valid) candidate first — the point is "have we already
+     * got this movie", not "did we pick the exact same torrent again". A
+     * purge (see the stale-download command) nulls file_path precisely so
+     * that a purged movie falls through to a fresh download here instead.
+     */
+    private function findCachedDownload(string $title): ?TorrentJob
+    {
+        return TorrentJob::query()
+            ->where('type', 'download')
+            ->where('status', 'completed')
+            ->whereNotNull('file_path')
+            ->whereRaw('LOWER(TRIM(title)) = ?', [MovieTitle::key($title)])
+            ->first();
+    }
+
     public function show(TorrentJob $torrentJob): InertiaResponse
     {
         abort_unless($torrentJob->type === 'download', 404);
@@ -119,6 +145,8 @@ class LibraryDownloadController extends Controller
     {
         abort_unless($torrentJob->type === 'download', 404);
         abort_if($torrentJob->file_path === null, 404);
+
+        $torrentJob->markWatched();
 
         [$path, $availableBytes, $totalBytes] = $this->resolveStreamTarget($torrentJob);
 
