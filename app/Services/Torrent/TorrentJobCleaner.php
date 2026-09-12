@@ -5,10 +5,11 @@ namespace App\Services\Torrent;
 use App\Enums\TorrentJobClearScope;
 use App\Models\TorrentJob;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Log;
 
 class TorrentJobCleaner
 {
+    public function __construct(private readonly TorrentFileDeleter $fileDeleter) {}
+
     /**
      * An in-flight job that hasn't reported anything in this long is
      * considered abandoned (worker crashed, container restarted mid-download)
@@ -37,9 +38,9 @@ class TorrentJobCleaner
         $ids = $query->pluck('id');
 
         if ($deleteFiles) {
-            TorrentJob::query()->whereIn('id', $ids)->cursor()->each(function (TorrentJob $torrentJob): void {
-                $this->deleteFiles($torrentJob);
-            });
+            TorrentJob::query()->whereIn('id', $ids)->cursor()->each(
+                fn (TorrentJob $torrentJob) => $this->fileDeleter->delete($torrentJob, self::class)
+            );
         }
 
         return TorrentJob::query()->whereIn('id', $ids)->delete();
@@ -57,21 +58,5 @@ class TorrentJobCleaner
                         ->where('updated_at', '<', now()->subMinutes(self::STALE_AFTER_MINUTES))
                 )
         );
-    }
-
-    private function deleteFiles(TorrentJob $torrentJob): void
-    {
-        foreach ([$torrentJob->file_path, $torrentJob->playback_path] as $path) {
-            if ($path === null) {
-                continue;
-            }
-
-            if (! @unlink($path) && file_exists($path)) {
-                Log::warning('TorrentJobCleaner: failed to delete file.', [
-                    'torrent_job_id' => $torrentJob->id,
-                    'path' => $path,
-                ]);
-            }
-        }
     }
 }

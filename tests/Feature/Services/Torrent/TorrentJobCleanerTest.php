@@ -2,11 +2,12 @@
 
 use App\Enums\TorrentJobClearScope;
 use App\Models\TorrentJob;
+use App\Services\Torrent\TorrentFileDeleter;
 use App\Services\Torrent\TorrentJobCleaner;
 
 function cleaner(): TorrentJobCleaner
 {
-    return new TorrentJobCleaner;
+    return new TorrentJobCleaner(new TorrentFileDeleter);
 }
 
 test('scope "all" deletes every torrent job regardless of status or type', function () {

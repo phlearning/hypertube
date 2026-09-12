@@ -1,12 +1,13 @@
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import LibraryController from '@/actions/App/Http/Controllers/LibraryController';
 import LibraryDownloadController from '@/actions/App/Http/Controllers/LibraryDownloadController';
 import { index } from '@/routes/library';
-import { Film, Star } from 'lucide-react';
+import { Check, Film, Star } from 'lucide-react';
 import { Form, Head, InfiniteScroll, Link } from '@inertiajs/react';
 import { Fragment } from 'react';
 
@@ -24,6 +25,7 @@ type Movie = {
     rating: number | null;
     poster: string | null;
     genre: string | null;
+    watched: boolean;
 };
 
 type Filters = {
@@ -45,7 +47,7 @@ type LibraryIndexProps = {
 function MovieCard({ movie }: { movie: Movie }) {
     return (
         <div className="flex flex-col overflow-hidden rounded-xl border bg-card">
-            <div className="flex aspect-2/3 items-center justify-center bg-muted">
+            <div className="relative flex aspect-2/3 items-center justify-center bg-muted">
                 {movie.poster ? (
                     <img
                         src={movie.poster}
@@ -54,6 +56,13 @@ function MovieCard({ movie }: { movie: Movie }) {
                     />
                 ) : (
                     <Film className="size-10 text-muted-foreground" />
+                )}
+
+                {movie.watched && (
+                    <Badge className="absolute top-2 right-2 gap-1">
+                        <Check className="size-3" />
+                        Vu
+                    </Badge>
                 )}
             </div>
 

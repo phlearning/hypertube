@@ -72,6 +72,71 @@ test('an authenticated user can start a download and the healthiest candidate is
     Queue::assertPushed(StartTorrentDownload::class);
 });
 
+test('requesting an already-downloaded, complete movie reuses it instead of starting a new download', function () {
+    Http::fake();
+    Queue::fake();
+    $user = User::factory()->create();
+    $existing = makeTorrentJob([
+        'title' => '  Movie  ',
+        'status' => 'completed',
+        'file_path' => '/shared/Movie/Movie.mp4',
+    ]);
+
+    $response = $this->actingAs($user)->post(route('library.downloads.store'), [
+        'title' => 'movie',
+        'candidates' => [
+            ['source' => 'source_a', 'source_id' => '1', 'torrent_url' => 'http://source-a.test/movie.torrent'],
+        ],
+    ]);
+
+    $response->assertRedirect(route('library.downloads.show', $existing));
+    expect(TorrentJob::count())->toBe(1);
+    Http::assertNothingSent();
+    Queue::assertNothingPushed();
+});
+
+test('a completed but purged movie (file deleted) starts a fresh download instead of reusing the old job', function () {
+    Queue::fake();
+    fakeDownloadCandidatesHttp();
+    $user = User::factory()->create();
+    makeTorrentJob([
+        'title' => 'Movie',
+        'status' => 'completed',
+        'file_path' => null,
+    ]);
+
+    $this->actingAs($user)->post(route('library.downloads.store'), [
+        'title' => 'Movie',
+        'candidates' => [
+            ['source' => 'source_b', 'source_id' => '2', 'torrent_url' => 'http://source-b.test/movie.torrent'],
+        ],
+    ]);
+
+    expect(TorrentJob::count())->toBe(2);
+    Queue::assertPushed(StartTorrentDownload::class);
+});
+
+test('a movie that previously failed to download is not treated as cached', function () {
+    Queue::fake();
+    fakeDownloadCandidatesHttp();
+    $user = User::factory()->create();
+    makeTorrentJob([
+        'title' => 'Movie',
+        'status' => 'failed',
+        'file_path' => '/shared/Movie/Movie.mp4',
+    ]);
+
+    $this->actingAs($user)->post(route('library.downloads.store'), [
+        'title' => 'Movie',
+        'candidates' => [
+            ['source' => 'source_b', 'source_id' => '2', 'torrent_url' => 'http://source-b.test/movie.torrent'],
+        ],
+    ]);
+
+    expect(TorrentJob::count())->toBe(2);
+    Queue::assertPushed(StartTorrentDownload::class);
+});
+
 test('two requests for the same movie deduplicate onto a single active download', function () {
     Queue::fake();
     fakeDownloadCandidatesHttp();

@@ -112,3 +112,44 @@ test('total_bytes changing alongside downloaded_bytes is still subject to the th
 
     Event::assertDispatchedTimes(TorrentJobProgressUpdated::class, 1);
 });
+
+test('markWatched() sets last_watched_at to now', function () {
+    $torrentJob = makeTorrentJob();
+    expect($torrentJob->last_watched_at)->toBeNull();
+
+    $torrentJob->markWatched();
+
+    expect($torrentJob->fresh()->last_watched_at)->not->toBeNull();
+});
+
+test('markWatched() does not broadcast progress', function () {
+    Event::fake([TorrentJobProgressUpdated::class]);
+    $torrentJob = makeTorrentJob();
+
+    $torrentJob->markWatched();
+
+    Event::assertNotDispatched(TorrentJobProgressUpdated::class);
+});
+
+test('rapid markWatched() calls within the throttle window only write once', function () {
+    $torrentJob = makeTorrentJob();
+
+    $torrentJob->markWatched();
+    $firstWatchedAt = $torrentJob->fresh()->last_watched_at;
+
+    $torrentJob->markWatched();
+
+    expect($torrentJob->fresh()->last_watched_at)->toEqual($firstWatchedAt);
+});
+
+test('markWatched() after the throttle window elapses updates last_watched_at again', function () {
+    $torrentJob = makeTorrentJob();
+
+    $torrentJob->markWatched();
+    $firstWatchedAt = $torrentJob->fresh()->last_watched_at;
+
+    $this->travel(2)->hours();
+    $torrentJob->markWatched();
+
+    expect($torrentJob->fresh()->last_watched_at)->not->toEqual($firstWatchedAt);
+});
