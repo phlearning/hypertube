@@ -1,9 +1,14 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { LogOut, BookOpen, Settings, LayoutGrid, User, Film, ShieldCheck } from 'lucide-react';
+import {
+    LogOut,
+    Settings,
+    LayoutGrid,
+    User,
+    Film,
+    ShieldCheck,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
-import { NavUser } from '@/components/nav-user';
 import {
     Sidebar,
     SidebarContent,
@@ -16,11 +21,10 @@ import {
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { logout } from '@/routes';
 import { dashboard } from '@/routes';
-import { index as adminTorrentJobsIndex } from '@/routes/admin/torrent-jobs'
-import { index as libraryIndex } from '@/routes/library'
+import { index as adminTorrentJobsIndex } from '@/routes/admin/torrent-jobs';
+import { index as libraryIndex } from '@/routes/library';
 import { edit } from '@/routes/profile';
-import { index } from '@/routes/users/index'
-
+import { index } from '@/routes/users/index';
 
 import type { Auth, NavItem } from '@/types';
 
@@ -43,15 +47,6 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
-const footerNavItems: NavItem[] = [
-
-    {
-        title: 'Repository',
-        href: "",
-        icon: BookOpen,
-    },
-];
-
 export function AppSidebar() {
     const cleanup = useMobileNavigation();
     const { auth } = usePage<{ auth: Auth }>().props;
@@ -61,13 +56,20 @@ export function AppSidebar() {
         router.flushAll();
     };
 
-    const navItems: NavItem[] = auth.user.role === 'admin'
-        ? [...mainNavItems, { title: 'Administration', href: adminTorrentJobsIndex(), icon: ShieldCheck }]
-        : mainNavItems;
+    const navItems: NavItem[] =
+        auth.user.role === 'admin'
+            ? [
+                  ...mainNavItems,
+                  {
+                      title: 'Administration',
+                      href: adminTorrentJobsIndex(),
+                      icon: ShieldCheck,
+                  },
+              ]
+            : mainNavItems;
 
     return (
         <Sidebar collapsible="icon" variant="inset">
-
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
@@ -117,10 +119,6 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>
-
-                {/*<NavFooter items={footerNavItems} className="mt-auto" />*/}
-
-                {/*<NavUser />*/}
             </SidebarFooter>
         </Sidebar>
     );

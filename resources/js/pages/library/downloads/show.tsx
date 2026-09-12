@@ -83,7 +83,9 @@ function formatDuration(seconds: number): string {
         : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
-export default function DownloadShow({ download: initialDownload }: DownloadShowProps) {
+export default function DownloadShow({
+    download: initialDownload,
+}: DownloadShowProps) {
     const [download, setDownload] = useState(initialDownload);
 
     // A completed download still needs live updates if transcoding
@@ -115,7 +117,10 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                 router.reload({ only: ['download'] });
             })
             .error((status: unknown) => {
-                console.error('Failed to subscribe to torrent job progress channel.', status);
+                console.error(
+                    'Failed to subscribe to torrent job progress channel.',
+                    status,
+                );
             });
 
         return () => {
@@ -125,14 +130,19 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
 
     const percent =
         download.total_bytes && download.total_bytes > 0
-            ? Math.min(100, Math.round((download.downloaded_bytes / download.total_bytes) * 100))
+            ? Math.min(
+                  100,
+                  Math.round(
+                      (download.downloaded_bytes / download.total_bytes) * 100,
+                  ),
+              )
             : null;
 
     const heading = download.title ?? 'Téléchargement';
 
     const waitingReason =
         download.status === 'failed'
-            ? 'Le téléchargement a échoué : la lecture n\'est pas possible.'
+            ? "Le téléchargement a échoué : la lecture n'est pas possible."
             : download.downloaded_bytes === 0
               ? 'En attente de données avant de pouvoir lire la vidéo…'
               : download.transcode_status === 'failed'
@@ -147,7 +157,9 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                 <Heading
                     variant="small"
                     title={heading}
-                    description={STATUS_LABELS[download.status] ?? download.status}
+                    description={
+                        STATUS_LABELS[download.status] ?? download.status
+                    }
                 />
 
                 {download.can_play ? (
@@ -157,13 +169,15 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                         className="aspect-video w-full max-w-3xl rounded-xl border bg-black"
                         src={stream.url(download.id)}
                     >
-                        Votre navigateur ne prend pas en charge la lecture vidéo intégrée.
+                        Votre navigateur ne prend pas en charge la lecture vidéo
+                        intégrée.
                     </video>
                 ) : (
                     <div className="flex aspect-video w-full max-w-3xl flex-col items-center justify-center gap-2 rounded-xl border bg-muted text-sm text-muted-foreground">
-                        {download.status !== 'failed' && download.transcode_status !== 'failed' && (
-                            <Spinner className="size-6" />
-                        )}
+                        {download.status !== 'failed' &&
+                            download.transcode_status !== 'failed' && (
+                                <Spinner className="size-6" />
+                            )}
                         {waitingReason}
                     </div>
                 )}
@@ -172,7 +186,9 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                     <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                         <div
                             className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${percent ?? (isSettled ? 100 : 0)}%` }}
+                            style={{
+                                width: `${percent ?? (isSettled ? 100 : 0)}%`,
+                            }}
                         />
                     </div>
 
@@ -188,7 +204,9 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                     </div>
 
                     {download.message && (
-                        <p className="text-sm text-muted-foreground">{download.message}</p>
+                        <p className="text-sm text-muted-foreground">
+                            {download.message}
+                        </p>
                     )}
                 </div>
 
@@ -196,39 +214,56 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                     <div className="max-w-md space-y-2 rounded-xl border bg-card p-4 text-sm">
                         {download.source && (
                             <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Source</span>
-                                <span>{SOURCE_LABELS[download.source] ?? download.source}</span>
+                                <span className="text-muted-foreground">
+                                    Source
+                                </span>
+                                <span>
+                                    {SOURCE_LABELS[download.source] ??
+                                        download.source}
+                                </span>
                             </div>
                         )}
 
                         {download.format && (
                             <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Format d'origine</span>
+                                <span className="text-muted-foreground">
+                                    Format d'origine
+                                </span>
                                 <span>{download.format}</span>
                             </div>
                         )}
 
                         {download.total_bytes !== null && (
                             <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Taille</span>
+                                <span className="text-muted-foreground">
+                                    Taille
+                                </span>
                                 <span>{formatBytes(download.total_bytes)}</span>
                             </div>
                         )}
 
-                        {(download.seeders !== null || download.peers !== null) && (
+                        {(download.seeders !== null ||
+                            download.peers !== null) && (
                             <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Seeders / Peers</span>
+                                <span className="text-muted-foreground">
+                                    Seeders / Peers
+                                </span>
                                 <span>
-                                    {download.seeders ?? '—'} / {download.peers ?? '—'}
+                                    {download.seeders ?? '—'} /{' '}
+                                    {download.peers ?? '—'}
                                 </span>
                             </div>
                         )}
 
                         {download.transcode_status && (
                             <div className="flex items-center justify-between gap-4">
-                                <span className="text-muted-foreground">Optimisation</span>
+                                <span className="text-muted-foreground">
+                                    Optimisation
+                                </span>
                                 <span className="text-right">
-                                    {TRANSCODE_STATUS_LABELS[download.transcode_status] ?? download.transcode_status}
+                                    {TRANSCODE_STATUS_LABELS[
+                                        download.transcode_status
+                                    ] ?? download.transcode_status}
                                 </span>
                             </div>
                         )}
@@ -239,32 +274,46 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
                     <div className="max-w-md space-y-2 rounded-xl border bg-card p-4 text-sm">
                         <h2 className="font-medium">Détails techniques</h2>
 
-                        {download.media_info.width !== null && download.media_info.height !== null && (
-                            <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Résolution</span>
-                                <span>
-                                    {download.media_info.width}×{download.media_info.height}
-                                </span>
-                            </div>
-                        )}
+                        {download.media_info.width !== null &&
+                            download.media_info.height !== null && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">
+                                        Résolution
+                                    </span>
+                                    <span>
+                                        {download.media_info.width}×
+                                        {download.media_info.height}
+                                    </span>
+                                </div>
+                            )}
 
                         {download.media_info.duration_seconds !== null && (
                             <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Durée</span>
-                                <span>{formatDuration(download.media_info.duration_seconds)}</span>
+                                <span className="text-muted-foreground">
+                                    Durée
+                                </span>
+                                <span>
+                                    {formatDuration(
+                                        download.media_info.duration_seconds,
+                                    )}
+                                </span>
                             </div>
                         )}
 
                         {download.media_info.video_codec && (
                             <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Codec vidéo</span>
+                                <span className="text-muted-foreground">
+                                    Codec vidéo
+                                </span>
                                 <span>{download.media_info.video_codec}</span>
                             </div>
                         )}
 
                         {download.media_info.audio_codec && (
                             <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Codec audio</span>
+                                <span className="text-muted-foreground">
+                                    Codec audio
+                                </span>
                                 <span>{download.media_info.audio_codec}</span>
                             </div>
                         )}
@@ -273,18 +322,30 @@ export default function DownloadShow({ download: initialDownload }: DownloadShow
 
                 {download.attempted_candidates.length > 0 && (
                     <div className="max-w-md space-y-2 rounded-xl border bg-card p-4 text-sm">
-                        <h2 className="font-medium">Candidats précédemment essayés</h2>
+                        <h2 className="font-medium">
+                            Candidats précédemment essayés
+                        </h2>
 
                         <ul className="space-y-1">
-                            {download.attempted_candidates.map((candidate, index) => (
-                                <li
-                                    key={index}
-                                    className="flex items-center justify-between gap-4 text-muted-foreground"
-                                >
-                                    <span>{SOURCE_LABELS[candidate.source ?? ''] ?? candidate.source ?? '—'}</span>
-                                    <span className="text-right">{candidate.message ?? 'Échec'}</span>
-                                </li>
-                            ))}
+                            {download.attempted_candidates.map(
+                                (candidate, index) => (
+                                    <li
+                                        key={index}
+                                        className="flex items-center justify-between gap-4 text-muted-foreground"
+                                    >
+                                        <span>
+                                            {SOURCE_LABELS[
+                                                candidate.source ?? ''
+                                            ] ??
+                                                candidate.source ??
+                                                '—'}
+                                        </span>
+                                        <span className="text-right">
+                                            {candidate.message ?? 'Échec'}
+                                        </span>
+                                    </li>
+                                ),
+                            )}
                         </ul>
                     </div>
                 )}

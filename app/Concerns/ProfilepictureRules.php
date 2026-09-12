@@ -2,12 +2,16 @@
 
 namespace App\Concerns;
 
-
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\File;
 
 trait ProfilepictureRules
 {
+    /**
+     * Get the validation rules used to validate profile pictures.
+     *
+     * @return array<int, File|string>
+     */
     protected function profilepictureRules(): array
     {
         return [

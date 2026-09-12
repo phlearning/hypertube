@@ -1,15 +1,15 @@
+import { Form, Head, InfiniteScroll, Link } from '@inertiajs/react';
+import { Check, Film, Star } from 'lucide-react';
+import { Fragment } from 'react';
+import LibraryController from '@/actions/App/Http/Controllers/LibraryController';
+import LibraryDownloadController from '@/actions/App/Http/Controllers/LibraryDownloadController';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import LibraryController from '@/actions/App/Http/Controllers/LibraryController';
-import LibraryDownloadController from '@/actions/App/Http/Controllers/LibraryDownloadController';
 import { index } from '@/routes/library';
-import { Check, Film, Star } from 'lucide-react';
-import { Form, Head, InfiniteScroll, Link } from '@inertiajs/react';
-import { Fragment } from 'react';
 
 type TorrentCandidate = {
     source: string;
@@ -89,9 +89,15 @@ function MovieCard({ movie }: { movie: Movie }) {
                 >
                     {({ processing }) => (
                         <>
-                            <input type="hidden" name="title" value={movie.title} />
+                            <input
+                                type="hidden"
+                                name="title"
+                                value={movie.title}
+                            />
                             {movie.candidates.map((candidate, i) => (
-                                <Fragment key={`${candidate.source}:${candidate.source_id}`}>
+                                <Fragment
+                                    key={`${candidate.source}:${candidate.source_id}`}
+                                >
                                     <input
                                         type="hidden"
                                         name={`candidates[${i}][source]`}
@@ -169,7 +175,10 @@ export default function LibraryIndex({ movies, filters }: LibraryIndexProps) {
                                         autoComplete="off"
                                         maxLength={200}
                                     />
-                                    <InputError className="mt-2" message={errors.q} />
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.q}
+                                    />
                                 </div>
 
                                 <div>
@@ -183,7 +192,10 @@ export default function LibraryIndex({ movies, filters }: LibraryIndexProps) {
                                         className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
                                     >
                                         {SORT_OPTIONS.map((option) => (
-                                            <option key={option.value} value={option.value}>
+                                            <option
+                                                key={option.value}
+                                                value={option.value}
+                                            >
                                                 {option.label}
                                             </option>
                                         ))}
@@ -218,11 +230,17 @@ export default function LibraryIndex({ movies, filters }: LibraryIndexProps) {
                                         aria-invalid={Boolean(errors.genre)}
                                         maxLength={100}
                                     />
-                                    <InputError className="mt-2" message={errors.genre} />
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.genre}
+                                    />
                                 </div>
 
                                 <div className="w-24">
-                                    <Label htmlFor="min_rating" className="sr-only">
+                                    <Label
+                                        htmlFor="min_rating"
+                                        className="sr-only"
+                                    >
                                         Min rating
                                     </Label>
                                     <Input
@@ -234,9 +252,14 @@ export default function LibraryIndex({ movies, filters }: LibraryIndexProps) {
                                         step={0.1}
                                         defaultValue={filters.min_rating ?? ''}
                                         placeholder="Min ★"
-                                        aria-invalid={Boolean(errors.min_rating)}
+                                        aria-invalid={Boolean(
+                                            errors.min_rating,
+                                        )}
                                     />
-                                    <InputError className="mt-2" message={errors.min_rating} />
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.min_rating}
+                                    />
                                 </div>
 
                                 <div className="w-24">
@@ -253,7 +276,10 @@ export default function LibraryIndex({ movies, filters }: LibraryIndexProps) {
                                         placeholder="Year"
                                         aria-invalid={Boolean(errors.year)}
                                     />
-                                    <InputError className="mt-2" message={errors.year} />
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.year}
+                                    />
                                 </div>
 
                                 <Button type="submit" disabled={processing}>
@@ -281,7 +307,10 @@ export default function LibraryIndex({ movies, filters }: LibraryIndexProps) {
                             {movies.data.map((movie) => (
                                 <MovieCard
                                     key={movie.candidates
-                                        .map((candidate) => `${candidate.source}:${candidate.source_id}`)
+                                        .map(
+                                            (candidate) =>
+                                                `${candidate.source}:${candidate.source_id}`,
+                                        )
                                         .join(',')}
                                     movie={movie}
                                 />
