@@ -124,12 +124,19 @@ class LibraryDownloadController extends Controller
      */
     private function findCachedDownload(string $title): ?TorrentJob
     {
+        $key = MovieTitle::key($title);
+
+        // Matched in PHP via MovieTitle::key() rather than a SQL LOWER/TRIM
+        // predicate, so this can never silently drift from the exact same
+        // normalization WatchedMovieAnnotator and MovieSearchService::group()
+        // use — the number of completed, still-cached downloads is small
+        // enough that fetching them all is cheap.
         return TorrentJob::query()
             ->where('type', 'download')
             ->where('status', 'completed')
             ->whereNotNull('file_path')
-            ->whereRaw('LOWER(TRIM(title)) = ?', [MovieTitle::key($title)])
-            ->first();
+            ->get()
+            ->first(fn (TorrentJob $torrentJob) => MovieTitle::key($torrentJob->title) === $key);
     }
 
     public function show(TorrentJob $torrentJob): InertiaResponse
