@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Heading from '@/components/heading';
 import { Spinner } from '@/components/ui/spinner';
 import echo from '@/echo';
@@ -64,6 +64,12 @@ const TRANSCODE_STATUS_LABELS: Record<string, string> = {
 
 const TRANSCODE_TERMINAL_STATUSES = ['completed', 'skipped', 'failed'];
 
+// A file still downloading can only safely be sought up to (roughly) the
+// proportion of it that's actually on disk — mapping bytes to playback time
+// isn't exact, so this margin keeps a seek from landing right on the edge
+// and immediately re-triggering a stall.
+const SEEK_SAFETY_MARGIN_SECONDS = 2;
+
 function formatBytes(bytes: number): string {
     if (bytes < 1024 * 1024) {
         return `${(bytes / 1024).toFixed(0)} Ko`;
@@ -87,6 +93,10 @@ export default function DownloadShow({
     download: initialDownload,
 }: DownloadShowProps) {
     const [download, setDownload] = useState(initialDownload);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    // Set by handleStalledNearBoundary when playback stalls right at the
+    // downloaded edge; consumed by the effect below once more bytes arrive.
+    const stalledNearBoundaryRef = useRef(false);
 
     // A completed download still needs live updates if transcoding
     // (dispatched right as the download settles) hasn't reached its own
@@ -128,6 +138,65 @@ export default function DownloadShow({
         };
     }, [download.id, isSettled]);
 
+    // Once more bytes land past a boundary stall, nudge playback so the
+    // browser retries the range it gave up on instead of staying frozen —
+    // it never retries a 416'd range on its own even after it stops being
+    // out of bounds.
+    useEffect(() => {
+        if (!stalledNearBoundaryRef.current) {
+            return;
+        }
+
+        stalledNearBoundaryRef.current = false;
+        videoRef.current?.play().catch(() => {
+            // A play() rejection here just means the browser still treats
+            // this as paused (e.g. no user gesture yet) — nothing to do.
+        });
+    }, [download.downloaded_bytes]);
+
+    // Bytes-downloaded and playback-time don't map exactly, but this is a
+    // close enough approximation to keep the seek bar from landing users on
+    // a not-yet-downloaded part of the file and triggering a 416.
+    function maxSafeSeekSeconds(video: HTMLVideoElement): number | null {
+        if (!download.total_bytes || !Number.isFinite(video.duration)) {
+            return null;
+        }
+
+        const downloadedRatio =
+            download.downloaded_bytes / download.total_bytes;
+
+        return Math.max(
+            0,
+            downloadedRatio * video.duration - SEEK_SAFETY_MARGIN_SECONDS,
+        );
+    }
+
+    function handleSeeking(event: React.SyntheticEvent<HTMLVideoElement>) {
+        const video = event.currentTarget;
+        const maxSafeSeconds = maxSafeSeekSeconds(video);
+
+        if (maxSafeSeconds !== null && video.currentTime > maxSafeSeconds) {
+            video.currentTime = maxSafeSeconds;
+        }
+    }
+
+    function handleStalledNearBoundary(
+        event: React.SyntheticEvent<HTMLVideoElement>,
+    ) {
+        const video = event.currentTarget;
+        const maxSafeSeconds = maxSafeSeekSeconds(video);
+
+        // Only worth remembering when the stall happened close to the
+        // downloaded edge — a stall for an unrelated reason shouldn't retry
+        // every single time more bytes arrive.
+        if (
+            maxSafeSeconds === null ||
+            video.currentTime >= maxSafeSeconds - SEEK_SAFETY_MARGIN_SECONDS
+        ) {
+            stalledNearBoundaryRef.current = true;
+        }
+    }
+
     const percent =
         download.total_bytes && download.total_bytes > 0
             ? Math.min(
@@ -162,17 +231,43 @@ export default function DownloadShow({
                     }
                 />
 
-                {download.can_play ? (
+                {download.can_play && (
                     <video
+                        ref={videoRef}
                         controls
-                        preload="metadata"
+                        // Eagerly probing for metadata is only safe once the
+                        // whole file is on disk. On a still-downloading
+                        // webm (the only format canPlay() allows before
+                        // completion), the browser's metadata search can
+                        // land past the downloaded edge, get a 416, and
+                        // spend a long time retrying before giving up —
+                        // felt as the page itself being stuck, not just
+                        // playback. Deferring the fetch to when the user
+                        // presses play avoids that hunt entirely.
+                        preload={download.is_complete ? 'metadata' : 'none'}
                         className="aspect-video w-full max-w-3xl rounded-xl border bg-black"
                         src={stream.url(download.id)}
+                        onSeeking={handleSeeking}
+                        onStalled={handleStalledNearBoundary}
+                        onWaiting={handleStalledNearBoundary}
+                        onError={handleStalledNearBoundary}
                     >
                         Votre navigateur ne prend pas en charge la lecture vidéo
                         intégrée.
                     </video>
-                ) : (
+                )}
+
+                {download.can_play &&
+                    !download.is_complete &&
+                    percent !== null && (
+                        <p className="max-w-3xl text-sm text-muted-foreground">
+                            Le téléchargement n'est pas terminé — vous ne pouvez
+                            avancer que jusqu'à environ {percent}% de la vidéo
+                            pour l'instant.
+                        </p>
+                    )}
+
+                {!download.can_play && (
                     <div className="flex aspect-video w-full max-w-3xl flex-col items-center justify-center gap-2 rounded-xl border bg-muted text-sm text-muted-foreground">
                         {download.status !== 'failed' &&
                             download.transcode_status !== 'failed' && (

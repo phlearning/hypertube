@@ -63,11 +63,15 @@ class TorrentJobPresenter
             return false;
         }
 
-        // A format VideoTranscoder wouldn't need a full re-encode for
-        // ('skip' or 'remux') is one browsers can already attempt natively,
-        // even before transcoding has run — the same domain knowledge
-        // VideoTranscoder itself uses to decide what ffmpeg work is needed.
-        return $this->transcoder->planFor($torrentJob->file_path) !== 'transcode';
+        // Only a 'skip' plan (webm) is safe to stream on downloaded bytes
+        // alone: webm has no "metadata at the end" problem the way a native
+        // mp4 does. A 'remux' plan's readiness is judged purely by
+        // transcode_status (the branch above) — a raw, not-yet-remuxed mp4
+        // usually has its moov atom near the end of the file, exactly the
+        // part sequential downloading fetches last, so declaring it playable
+        // before that box exists on disk is what produced "corrupted video"
+        // reports for otherwise-healthy downloads.
+        return $this->transcoder->planFor($torrentJob->file_path) === 'skip';
     }
 
     private function formatOf(?string $path): ?string

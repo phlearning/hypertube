@@ -66,13 +66,21 @@ test('can_play truth table mirrors native-format-or-transcoded logic', function 
 
     $cases = [
         [0, '/shared/Movie/Movie.mp4', null, false],
-        [10, '/shared/Movie/Movie.mp4', null, true],
+        // A native mp4's moov atom usually sits near the end of the file —
+        // exactly the part sequential downloading fetches last — so it
+        // isn't safe to play on downloaded bytes alone, unlike webm below.
+        // Readiness for a 'remux' plan is judged purely by transcode_status,
+        // same as a full transcode (see the two 'completed'/'processing'
+        // mp4 cases further down).
+        [10, '/shared/Movie/Movie.mp4', null, false],
         [10, '/shared/Movie/Movie.webm', null, true],
         [10, '/shared/Movie/Movie.mkv', null, false],
         [10, '/shared/Movie/Movie.mkv', 'processing', false],
         [10, '/shared/Movie/Movie.mkv', 'completed', true],
         [10, '/shared/Movie/Movie.mkv', 'failed', false],
         [10, '/shared/Movie/Movie.webm', 'skipped', true],
+        [10, '/shared/Movie/Movie.mp4', 'processing', false],
+        [10, '/shared/Movie/Movie.mp4', 'completed', true],
     ];
 
     foreach ($cases as [$downloadedBytes, $filePath, $transcodeStatus, $expected]) {
