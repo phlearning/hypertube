@@ -1,15 +1,35 @@
 services:
+  frontend-build:
+    image: hypertube-app
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    pull_policy: never
+    environment:
+      SKIP_SETUP: "1"
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+      - node_modules:/var/www/html/node_modules
+    command: >
+      sh -lc 'if [ ! -f public/build/manifest.json ]; then npm ci && npm run build; fi'
+    networks:
+      - hypertube
+
   app:
     image: hypertube-app
     build:
       context: .
       dockerfile: docker/app/Dockerfile
+    pull_policy: never
     ports:
       - "8000:8000"
     volumes:
       - .:/var/www/html
       - torrent_downloads:/shared
     depends_on:
+      frontend-build:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       redis:
@@ -19,6 +39,10 @@ services:
 
   reverb:
     image: hypertube-app
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    pull_policy: never
     command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
     ports:
       - "8080:8080"
@@ -90,6 +114,7 @@ services:
 
 volumes:
   mysql_data:
+  node_modules:
   torrent_downloads:
 
 networks:

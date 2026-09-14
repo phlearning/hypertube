@@ -1,19 +1,30 @@
 COMPOSE = docker compose
 APP     = $(COMPOSE) exec app
+PHP    = php
+HELP_SCRIPT = scripts/make-help.php
+RM_SCRIPT = scripts/rm-dir.php
 
 .PHONY: help up down build restart logs ps shell mysql-shell \
-        install migrate migrate-fresh key-generate \
-        test test-filter pint pint-check phpstan check \
-        ping-worker fresh
+	install migrate migrate-fresh key-generate \
+	test test-filter pint pint-check phpstan check \
+	ping-worker fresh clean fclean user-admin user-validate
 
 help:
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
+	@$(PHP) $(HELP_SCRIPT) $(MAKEFILE_LIST)
 
 up: ## Start the full stack in the background
-	$(COMPOSE) up -d
+	$(COMPOSE) up --build -d
 
 down: ## Stop the stack
 	$(COMPOSE) down
+
+clean: ## Stop the stack and remove generated frontend artifacts
+	$(PHP) $(RM_SCRIPT) public/build
+	$(COMPOSE) down --remove-orphans
+
+fclean: ## Remove containers, volumes, images, and generated frontend artifacts
+	$(PHP) $(RM_SCRIPT) public/build
+	$(COMPOSE) down --remove-orphans --volumes --rmi all
 
 build: ## Rebuild all images
 	$(COMPOSE) build
@@ -43,6 +54,12 @@ migrate-fresh: ## Drop all tables and re-run migrations
 
 key-generate: ## Generate the app key
 	$(APP) php artisan key:generate
+
+user-admin: ## Promote a user to admin (make user-admin username=john)
+	$(APP) php artisan user:make-admin $(username)
+
+user-validate: ## Mark a user as verified (make user-validate username=john)
+	$(APP) php artisan user:verify $(username)
 
 test: ## Run the full Pest suite
 	$(APP) php artisan test --compact
